@@ -1,0 +1,88 @@
+{
+  "type": "record",
+  "name": "OrderEvent",
+  "namespace": "fleetmind.events",
+  "fields": [
+    {
+      "name": "orderId",
+      "type": "string"
+
+    },
+    {
+      "name": "customerName",
+      "type": "string"
+    },
+    {
+      "name": "restaurantId",
+      "type": "long"
+    },
+    {
+      "name": "restaurantName",
+      "type": "string"
+    },
+    {
+      "name": "pickupLat",
+      "type": "double"
+    },
+    {
+      "name": "dropoffLat",
+      "type": "double"
+    },
+    {
+      "name": "pickupLng",
+      "type": "double"
+    },
+    {
+      "name": "dropoffLng",
+      "type": "double"
+    },
+    {
+      "name": "estimatedDistanceKm",
+      "type": "double"
+    },
+    {
+      "name": "estimatedDurationMinutes",
+      "type": "int"
+    },
+
+    {
+      "name": "status",
+      "type": {
+        "type": "enum",
+        "name": "OrderStatus",
+        "symbols": [
+          "CREATED",
+          "ASSIGNED",
+          "PICKED_UP",
+          "DELIVERED",
+          "CANCELLED"
+        ]
+      }
+    },
+    {
+      "name": "assignedDriverId",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "slaDeadLineTs",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }
+    },
+    {
+      "name": "createdTs",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }
+    }
+  ]
+
+
+
+}

@@ -1,0 +1,61 @@
+server:
+  port: 8086
+
+spring:
+  application:
+    name: command-service          # trace service name in Jaeger + application tag on metrics
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/fleetmind
+    username: postgres
+    password: fleetmind
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    schema-registry-url: http://localhost:8081
+
+    consumer:
+      group-id: command-service
+      enable-auto-commit: false
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: io.confluent.kafka.serializers.KafkaAvroDeserializer
+      max-poll-records: 500
+      properties:
+        schema.registry.url: http://localhost:8081
+        specific.avro.reader: true
+        partition.assignment.strategy: org.apache.kafka.clients.consumer.CooperativeStickyAssignor
+    listener:
+      ack-mode: MANUAL
+      concurrency: 12
+      # reaches ONLY Boot's auto-configured kafkaListenerContainerFactory —
+      # i.e. the projection listeners (orders / gps.pings / alerts / eta.updates).
+      # Custom factories/templates need setObservationEnabled(true) in code.
+      observation-enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true   # publish _bucket series so PromQL can compute p95/p99
+  tracing:
+    sampling:
+      probability: 1.0               # demo project — trace everything; prod would sample ~1-10%
+  otlp:
+    tracing:
+      endpoint: http://localhost:4318/v1/traces   # jaeger all-in-one, OTLP over HTTP
+
+# net.devh starter reads grpc.* from the TOP level — not under spring.*
+grpc:
+  server:
+    port: 9091
+  client:
+    ai-service:
+      address: static://localhost:50051
+      negotiationType: plaintext

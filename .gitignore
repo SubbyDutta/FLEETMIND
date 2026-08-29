@@ -1,0 +1,51 @@
+# ---------- Secrets (NEVER commit) ----------
+.env
+**/.env
+*.env.local
+
+# ---------- Java / Gradle ----------
+build/
+**/build/
+.gradle/
+out/
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# ---------- IDE ----------
+.idea/
+*.iml
+.vscode/
+.junie/
+
+# ---------- Python (ai-service) ----------
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+# ---------- Eval outputs & caches (rebuildable; scorecard goes in README) ----------
+ai-service/evals/out/
+ai-service/evals/.judge_cache/
+ai-service/.cache/
+
+# ---------- Node / web ----------
+node_modules/
+web/dist/
+web/.vite/
+
+# ---------- OSRM map data (large binaries — rebuild per README quickstart) ----------
+data/
+
+# ---------- Runtime junk ----------
+*.log
+logs/
+kafka-streams/
+
+# ---------- OS ----------
+Thumbs.db
+Desktop.ini
+.DS_Store

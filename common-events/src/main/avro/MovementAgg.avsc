@@ -1,0 +1,44 @@
+{
+  "type": "record",
+  "namespace": "com.fleetmind.avro",
+  "name": "MovementAgg",
+
+  "fields": [
+
+    {
+      "name": "driverId",
+      "type": "string"
+    },
+
+    {
+      "name": "firstLat",
+      "type": "double"
+    },
+
+    {
+      "name": "firstLng",
+      "type": "double"
+    },
+
+    {
+      "name": "lastLat",
+      "type": "double"
+    },
+
+    {
+      "name": "lastLng",
+      "type": "double"
+    },
+
+    {
+      "name": "pingCount",
+      "type": "int"
+    },
+
+    {
+      "name": "assigned",
+      "type": "boolean"
+    }
+
+  ]
+}

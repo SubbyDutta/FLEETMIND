@@ -1,0 +1,17 @@
+# Prometheus PULLS metrics — each service just exposes /actuator/prometheus and
+# forgets observability exists. The services run on the Windows host (bootRun),
+# Prometheus runs in Docker, so targets go through host.docker.internal.
+global:
+  scrape_interval: 5s      # demo cadence; prod is usually 15-60s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: command-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8086"]
+
+  - job_name: fleet-simulator
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8085"]

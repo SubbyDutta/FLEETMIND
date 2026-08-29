@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package fleetmind.telemetry;
+
+option java_package = "com.fleetmind.telemetry";
+option java_multiple_files = true;
+
+service TelemetryService {
+
+  rpc WatchDriver (WatchRequest) returns (stream DriverPing);
+}
+
+message WatchRequest {
+  string driver_id = 1;
+  int32  samples   = 2;
+}
+
+message DriverPing {
+  double lat        = 1;
+  double lng        = 2;
+  string status     = 3;
+  double speed_kmph = 4;
+  int64  ts_millis  = 5;
+}

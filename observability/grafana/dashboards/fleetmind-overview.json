@@ -1,0 +1,90 @@
+{
+  "uid": "fleetmind-overview",
+  "title": "FleetMind Overview",
+  "tags": ["fleetmind", "kafka", "jvm"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Kafka consumer lag (records behind, by consumer group / topic)",
+      "description": "kafka_consumer_fetch_manager_records_lag from the client's own fetch manager — no broker-side exporter needed. Flat near 0 = consumers keep up; a climbing line = falling behind (or a stopped consumer).",
+      "datasource": { "type": "prometheus", "uid": "fleetmind-prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0 }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application, topic) (kafka_consumer_fetch_manager_records_lag)",
+          "legendFormat": "{{application}} ← {{topic}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Message throughput (records/sec)",
+      "description": "Producer sends vs consumer reads, per service. In steady state the pairs track each other; a gap that persists shows up as lag on the left panel.",
+      "datasource": { "type": "prometheus", "uid": "fleetmind-prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "reqps", "min": 0 }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application) (rate(kafka_producer_record_send_total[1m]))",
+          "legendFormat": "{{application}} produced"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (application) (rate(kafka_consumer_fetch_manager_records_consumed_total[1m]))",
+          "legendFormat": "{{application}} consumed"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "HTTP server latency p95 / p99",
+      "description": "histogram_quantile over http_server_requests_seconds_bucket — requires management.metrics.distribution.percentiles-histogram.http.server.requests=true in each service (that's what publishes the _bucket series).",
+      "datasource": { "type": "prometheus", "uid": "fleetmind-prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "s", "min": 0 }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, application) (rate(http_server_requests_seconds_bucket[5m])))",
+          "legendFormat": "{{application}} p95"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.99, sum by (le, application) (rate(http_server_requests_seconds_bucket[5m])))",
+          "legendFormat": "{{application}} p99"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "JVM heap (used vs max)",
+      "description": "Sawtooth = normal GC breathing. Used creeping toward max with shrinking teeth = memory pressure.",
+      "datasource": { "type": "prometheus", "uid": "fleetmind-prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "bytes", "min": 0 }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application) (jvm_memory_used_bytes{area=\"heap\"})",
+          "legendFormat": "{{application}} used"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (application) (jvm_memory_max_bytes{area=\"heap\"})",
+          "legendFormat": "{{application}} max"
+        }
+      ]
+    }
+  ]
+}

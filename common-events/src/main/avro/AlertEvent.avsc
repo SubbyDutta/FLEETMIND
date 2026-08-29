@@ -1,0 +1,69 @@
+{
+  "type": "record",
+  "name": "AlertEvent",
+  "namespace": "fleetmind.events",
+  "fields": [
+    {
+      "name": "alertId",
+      "type": "string"
+    },
+    {
+      "name": "orderId",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "driverId",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "type",
+      "type": {
+        "type": "enum",
+        "name": "AlertType",
+        "symbols": [
+          "SLA_BREACH",
+          "IDLE_DRIVER",
+          "STUCK"
+        ]
+      }
+    },
+    {
+      "name": "severity",
+      "type": {
+        "type": "enum",
+        "name": "Severity",
+        "symbols": [
+          "LOW",
+          "MED",
+          "HIGH"
+        ]
+      }
+    },
+    {
+      "name": "reason",
+      "type": "string"
+    },
+    {
+      "name": "windowStartTs",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }
+    },
+    {
+      "name": "windowEndTs",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }
+    }
+  ]
+}

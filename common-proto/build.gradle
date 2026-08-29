@@ -1,0 +1,36 @@
+plugins {
+    id 'java-library'
+    id 'com.google.protobuf' version '0.9.4'
+}
+
+def grpcVersion = '1.68.1'
+def protobufVersion = '4.28.2'
+
+dependencies {
+    // api, not implementation: command-service compiles against the generated
+    // stubs, so grpc types must ride transitively through this module.
+    api "io.grpc:grpc-stub:${grpcVersion}"
+    api "io.grpc:grpc-protobuf:${grpcVersion}"
+    api "com.google.protobuf:protobuf-java:${protobufVersion}"
+
+    // generated stubs carry @javax.annotation.Generated, gone from the JDK
+    // since Java 11 — grpc-java's documented workaround (SOURCE retention,
+    // so compileOnly is enough and consumers never see it)
+    compileOnly "org.apache.tomcat:annotations-api:6.0.53"
+}
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:${protobufVersion}"
+    }
+    plugins {
+        grpc {
+            artifact = "io.grpc:protoc-gen-grpc-java:${grpcVersion}"
+        }
+    }
+    generateProtoTasks {
+        all()*.plugins {
+            grpc {}      // emit ToolServiceGrpc service stubs, not just messages
+        }
+    }
+}

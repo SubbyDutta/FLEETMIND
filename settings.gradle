@@ -1,0 +1,10 @@
+rootProject.name="fleetmind"
+
+include(
+        "common-events",
+        "common-proto",
+        "fleet-simulator",
+        "stream-processor",
+        "command-service"
+
+)

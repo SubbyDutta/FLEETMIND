@@ -1,0 +1,39 @@
+{
+  "type": "record",
+  "name": "DispatchAction",
+  "namespace": "fleetmind.events",
+  "fields": [
+    {
+      "name": "orderId",
+      "type": "string"
+    },
+    {
+      "name": "action",
+      "type": {
+        "type": "enum",
+        "name": "DispatchActionType",
+        "symbols": [
+          "REASSIGN",
+          "NOTIFY",
+          "PRIORITIZE",
+          "FLAG_CANCEL"
+        ]
+      }
+    },
+    {
+      "name": "targetId",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "requestedTs",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }
+    }
+  ]
+}

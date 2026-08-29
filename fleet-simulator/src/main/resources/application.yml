@@ -1,0 +1,33 @@
+server:
+  port: 8085
+
+
+spring:
+  application:
+    name: fleet-simulator          # trace service name in Jaeger + application tag on metrics
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    schema-registry-url: http://localhost:8081
+
+# NOTE: no spring.kafka.listener.observation-enabled here — it would be a no-op.
+# Every template and listener factory in this module is a hand-built bean
+# (KafkaProducerConfig / KafkaConsumerConfig / KafkaErrorConfig), so observation
+# is switched on in code where each bean is created.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true   # publish _bucket series so PromQL can compute p95/p99
+  tracing:
+    sampling:
+      probability: 1.0               # demo project — trace everything; prod would sample ~1-10%
+  otlp:
+    tracing:
+      endpoint: http://localhost:4318/v1/traces   # jaeger all-in-one, OTLP over HTTP

@@ -1,0 +1,30 @@
+{
+  "type": "record",
+  "name": "EtaUpdate",
+  "namespace": "fleetmind.events",
+  "fields": [
+    {
+      "name": "orderId",
+      "type": "string"
+    },
+    {
+      "name": "driverId",
+      "type": "string"
+    },
+    {
+      "name": "etaMinutes",
+      "type": "double"
+    },
+    {
+      "name": "remainingMeters",
+      "type": "double"
+    },
+    {
+      "name": "computedTs",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }
+    }
+  ]
+}

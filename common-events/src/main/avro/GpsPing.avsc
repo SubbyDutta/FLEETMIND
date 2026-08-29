@@ -1,0 +1,43 @@
+{
+  "type": "record",
+  "name": "GpsPing",
+  "namespace": "fleetmind.events",
+  "fields": [
+    {
+      "name": "driverId",
+      "type": "string"
+    },
+    {
+      "name": "lat",
+      "type": "double"
+    },
+    {
+      "name": "lng",
+      "type": "double"
+    },
+    {
+      "name": "speedKmph",
+      "type": "double"
+    },
+    {
+      "name": "status",
+      "type": {
+        "type": "enum",
+        "name": "DriverState",
+        "symbols": [
+          "IDLE",
+          "TO_PICKUP",
+          "TO_DROP",
+          "OFFLINE"
+        ]
+      }
+    },
+    {
+      "name": "ts",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }
+    }
+  ]
+}

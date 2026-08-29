@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package fleetmind.tools;
+
+option java_package = "com.fleetmind.tools";
+option java_multiple_files = true;
+
+
+service ToolService {
+  rpc ReassignOrder  (ReassignRequest)     returns (ReassignResponse);
+  rpc NotifyCustomer (NotifyRequest)       returns (NotifyResponse);
+  rpc GetOrderStatus (OrderStatusRequest)  returns (OrderStatusResponse);
+  rpc GetDriverOverview (DriverOverviewRequest) returns(DriverOverviewResponse);
+}
+
+message ReassignRequest {
+  string order_id      = 1;
+  string new_driver_id = 2;
+  string reason        = 3;
+}
+
+message ReassignResponse {
+  bool   success = 1;
+  string message = 2;
+}
+
+message NotifyRequest {
+  string order_id = 1;
+  string message  = 2;
+  string reason   = 3;
+}
+
+message NotifyResponse {
+  bool   success = 1;
+  string message = 2;
+}
+
+message OrderStatusRequest {
+  string order_id = 1;
+}
+
+message Alert {
+  string type       = 1;
+  string severity   = 2;
+  string reason     = 3;
+  string created_at = 4;
+}
+
+message OrderStatusResponse {
+  bool   found           = 1;
+  string order_id        = 2;
+  string status          = 3;
+  string customer_name   = 4;
+  string restaurant      = 5;
+  string assigned_driver = 6;
+  string sla_deadline    = 7;
+  string promised_eta    = 8;
+  string current_eta     = 9;
+  repeated Alert open_alerts = 10;
+}
+message DriverOverviewRequest {
+  string driver_id = 1;
+}
+
+message CurrentOrder {
+  string order_id     = 1;
+  string status       = 2;
+  string restaurant   = 3;
+  string current_eta  = 4;
+  string sla_deadline = 5;
+}
+message DriverOverviewResponse {
+  bool   found         = 1;
+  string driver_id     = 2;
+  string name          = 3;
+  string status        = 4;
+  double speed_kmph    = 5;
+  string last_seen     = 6;
+  CurrentOrder current_order = 7;
+  repeated Alert open_alerts = 8;
+}

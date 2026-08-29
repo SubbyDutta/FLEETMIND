@@ -1,0 +1,19 @@
+plugins {
+    id 'org.springframework.boot'
+    id 'io.spring.dependency-management'
+    id 'java'
+}
+
+dependencies {
+
+    implementation project(":common-events")
+
+    implementation "org.springframework.boot:spring-boot-starter"
+
+    implementation "org.springframework.kafka:spring-kafka"
+    implementation "org.apache.kafka:kafka-streams"
+    implementation "org.springframework.boot:spring-boot-starter-web"
+
+
+    implementation "io.confluent:kafka-streams-avro-serde:7.8.0"
+}

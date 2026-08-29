@@ -1,0 +1,18 @@
+syntax="proto3";
+package fleetmind.agent;
+option java_package = "com.fleetmind.agent";
+option java_multiple_files = true;
+service AgentService{
+  rpc Chat(ChatRequest) returns (stream ChatEvent);
+  rpc Analytics(ChatRequest) returns (stream ChatEvent);
+
+}
+message ChatRequest{
+  string question=1;
+}
+message ChatEvent{
+  string type=1;
+  int32 step=2;
+  string tool_name=3;
+  string payload_json=4;
+}

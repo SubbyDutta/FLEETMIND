@@ -1,0 +1,16 @@
+# Provisioned so the stack is zero-click: docker compose up -> dashboards work.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: fleetmind-prometheus
+    access: proxy
+    url: http://prometheus:9090   # container-to-container, in-network DNS
+    isDefault: true
+
+  - name: Jaeger
+    type: jaeger
+    uid: fleetmind-jaeger
+    access: proxy
+    url: http://jaeger:16686

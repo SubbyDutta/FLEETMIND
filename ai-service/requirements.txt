@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+google-genai
+psycopg[binary]
+psycopg_pool
+pydantic
+pydantic-settings
+python-dotenv
+pytest
+google-genai
+grpcio
+grpcio-tools
+tenacity
