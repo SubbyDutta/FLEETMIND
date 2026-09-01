@@ -9,7 +9,9 @@ scrape_configs:
   - job_name: command-service
     metrics_path: /actuator/prometheus
     static_configs:
-      - targets: ["host.docker.internal:8086"]
+      # 8087 = the optional second instance for the P15 leader-failover demo.
+      # When it's not running the target just shows as down — harmless.
+      - targets: ["host.docker.internal:8086", "host.docker.internal:8087"]
 
   - job_name: fleet-simulator
     metrics_path: /actuator/prometheus

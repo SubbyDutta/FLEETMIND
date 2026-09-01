@@ -5,6 +5,7 @@ include(
         "common-proto",
         "fleet-simulator",
         "stream-processor",
-        "command-service"
+        "command-service",
+        "query-service"
 
 )

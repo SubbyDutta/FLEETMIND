@@ -1,28 +1,26 @@
 package com;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fleetmind.agent.AgentServiceGrpc;
 import com.fleetmind.agent.ChatEvent;
-import com.fleetmind.agent.ChatRequest;
-import net.devh.boot.grpc.client.inject.GrpcClient;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 @RestController
 @RequestMapping("/api/analytics")
 @CrossOrigin(origins = "*")
 public class AnalyticsController {
 
-    @GrpcClient("ai-service")
-    private AgentServiceGrpc.AgentServiceBlockingStub agentStub;
-
+    private final AgentGateway agentGateway;
     private final ObjectMapper mapper = new ObjectMapper();
+
+    public AnalyticsController(AgentGateway agentGateway) {
+        this.agentGateway = agentGateway;
+    }
 
     public record AnalyticsRequest(String question) {}
 
@@ -32,30 +30,29 @@ public class AnalyticsController {
             return ResponseEntity.badRequest().body(Map.of("error", "question is required"));
         }
         List<String> toolsUsed = new ArrayList<>();
+        AtomicReference<ChatEvent> terminal = new AtomicReference<>();
         try {
-            Iterator<ChatEvent> events = agentStub
-                    .withDeadlineAfter(60, TimeUnit.SECONDS)
-                    .analytics(ChatRequest.newBuilder().setQuestion(req.question()).build());
-            while (events.hasNext()) {
-                ChatEvent ev = events.next();
+            agentGateway.analytics(req.question(), ev -> {
                 switch (ev.getType()) {
                     case "TOOL_CALL" -> toolsUsed.add(ev.getToolName());
-                    case "FINAL" -> {
-                        String answer = mapper.readTree(ev.getPayloadJson()).path("answer").asText();
-                        return ResponseEntity.ok(Map.of(
-                                "answer", answer,
-                                "steps", ev.getStep(),
-                                "tools_used", toolsUsed));
-                    }
-                    case "ERROR" -> {
-                        String msg = mapper.readTree(ev.getPayloadJson()).path("error").asText();
-                        return ResponseEntity.status(502).body(Map.of("error", msg, "tools_used", toolsUsed));
-                    }
+                    case "FINAL", "ERROR" -> terminal.set(ev);
                 }
-            }
-            return ResponseEntity.status(502).body(Map.of("error", "stream ended without a final answer"));
-        } catch (io.grpc.StatusRuntimeException e) {
-            return ResponseEntity.status(502).body(Map.of("error", "ai-service: " + e.getStatus()));
+            });
+        } catch (AgentUnavailableException e) {
+            return ResponseEntity.status(503).body(Map.of(
+                    "error", e.getMessage(),
+                    "circuit_open", e.isCircuitOpen()));
         }
+
+        ChatEvent last = terminal.get();
+        if (last == null) {
+            return ResponseEntity.status(502).body(Map.of("error", "stream ended without a final answer"));
+        }
+        if ("ERROR".equals(last.getType())) {
+            String msg = mapper.readTree(last.getPayloadJson()).path("error").asText();
+            return ResponseEntity.status(502).body(Map.of("error", msg, "tools_used", toolsUsed));
+        }
+        String answer = mapper.readTree(last.getPayloadJson()).path("answer").asText();
+        return ResponseEntity.ok(Map.of("answer", answer, "steps", last.getStep(), "tools_used", toolsUsed));
     }
 }

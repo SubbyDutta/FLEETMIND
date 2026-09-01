@@ -26,6 +26,11 @@ services:
     ports: ["5432:5432"]
     environment: { POSTGRES_DB: fleetmind, POSTGRES_PASSWORD: fleetmind }
     volumes: ["./db/init.sql:/docker-entrypoint-initdb.d/init.sql"]
+  redis:
+    image: redis:7.4-alpine
+    ports: [ "6379:6379" ]
+
+    command: redis-server --save '' --appendonly no --maxmemory 128mb
   osrm:
     image: osrm/osrm-backend
     command: osrm-routed --algorithm mld /data/kolkata.osrm
@@ -40,12 +45,9 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
       KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
 
-  # ---- P13B observability stack ----------------------------------------
-  # Services run on the host (bootRun), so Prometheus scrapes and Grafana
-  # queries go through host.docker.internal; Jaeger just listens for OTLP.
   prometheus:
     image: prom/prometheus:v2.53.0
-    ports: ["9099:9090"]   # host 9090 is reserved for geo-service (P15)
+    ports: ["9099:9090"]
     volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
 

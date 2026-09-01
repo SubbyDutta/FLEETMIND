@@ -1,0 +1,33 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: query-service
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/fleetmind
+    username: postgres
+    password: fleetmind
+
+  graphql:
+    graphiql:
+      enabled: true
+
+fleetmind:
+  graphql:
+    max-depth: 15
+    max-complexity: 300
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  level:
+    org.springframework.jdbc.core.JdbcTemplate: DEBUG

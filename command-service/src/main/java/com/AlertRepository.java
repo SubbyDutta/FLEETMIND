@@ -2,6 +2,7 @@ package com;
 
 import fleetmind.events.AlertEvent;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -28,6 +29,7 @@ public class AlertRepository {
                 alert.getReason()
         );
     }
+    @Cacheable(cacheNames = "alerts", key = "'recent'")
     public List<Map<String, Object>> findRecent() {
         return jdbc.queryForList(
                 """

@@ -27,10 +27,14 @@ public class OutboxPublisher {
     private final JdbcTemplate jdbc;
     private final KafkaTemplate<String, DispatchAction> dispatchKafkaTemplate;
     private final ObjectMapper mapper = new ObjectMapper();
+    private final OutboxLeaderLease lease;
 
     @Scheduled(fixedDelay = 2000)
     @Transactional
     public void drainOutbox() {
+        if (!lease.tryAcquire()) {
+            return;
+        }
         List<Map<String, Object>> rows = jdbc.queryForList("""
                 SELECT id, aggregate_id, payload
                 FROM outbox

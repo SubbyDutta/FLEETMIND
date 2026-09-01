@@ -3,6 +3,7 @@ package com;
 
 import fleetmind.events.GpsPing;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -33,6 +34,7 @@ public class DriverRepository {
                 ping.getSpeedKmph()
         );
     }
+    @Cacheable(cacheNames = "drivers", key = "'all'")
     public List<Map<String,Object>> findAll()
     {
         return jdbc.queryForList(

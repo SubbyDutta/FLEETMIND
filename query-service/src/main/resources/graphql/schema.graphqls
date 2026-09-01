@@ -1,0 +1,51 @@
+type Query {
+    activeOrders(limit: Int! = 50): [Order!]!
+    order(id: ID!): Order
+    drivers(status: DriverStatus): [Driver!]!
+    driver(id: ID!): Driver
+    openAlerts(limit: Int! = 50): [Alert!]!
+}
+
+type Order {
+    id: ID!
+    customerName: String!
+    restaurant: String!
+    status: OrderStatus!
+    pickup: GeoPoint!
+    dropoff: GeoPoint!
+    slaDeadline: String!
+    currentEta: String
+    createdAt: String!
+    driver: Driver
+    alerts: [Alert!]!
+}
+
+type Driver {
+    id: ID!
+    name: String!
+    status: DriverStatus!
+    location: GeoPoint
+    speedKmph: Float
+    activeOrders: [Order!]!
+}
+
+type Alert {
+    id: ID!
+    type: AlertType!
+    severity: Severity!
+    orderId: String
+    driverId: String
+    reason: String!
+    resolved: Boolean!
+    createdAt: String!
+}
+
+type GeoPoint {
+    lat: Float!
+    lng: Float!
+}
+
+enum OrderStatus  { CREATED ASSIGNED PICKED_UP DELIVERED CANCELLED }
+enum DriverStatus { IDLE TO_PICKUP TO_DROP OFFLINE }
+enum AlertType    { SLA_BREACH IDLE_DRIVER STUCK }
+enum Severity     { LOW MED HIGH }

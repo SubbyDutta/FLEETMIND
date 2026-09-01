@@ -1,7 +1,10 @@
 package com;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
+
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.slf4j.Logger;
@@ -30,13 +33,13 @@ public class RoutingClient {
                 .build();
     }
 
-
+    @CircuitBreaker(name="osrm",fallbackMethod="routeFallback")
     public Optional<Route> route(double fromLat, double fromLng, double toLat, double toLng) {
         String uri = String.format(Locale.US,
                 "/route/v1/driving/%f,%f;%f,%f?overview=full&geometries=geojson",
                 fromLng, fromLat, toLng, toLat);
 
-        try {
+
             OsrmResponse response = http.get().uri(uri).retrieve().body(OsrmResponse.class);
 
             if (response == null || response.routes == null || response.routes.isEmpty()) {
@@ -59,11 +62,19 @@ public class RoutingClient {
 
             return Optional.of(new Route(osrmRoute.distance, osrmRoute.duration, waypoints));
 
-        } catch (Exception e) {
-            log.warn("OSRM routing failed for {},{} -> {},{} : {} - falling back to straight line",
-                    fromLat, fromLng, toLat, toLng, e.toString());
-            return Optional.empty();
-        }
+
+    }
+    // Real failures (timeout, connect-refused, 5xx) land here AFTER being recorded as failures.
+    private Optional<Route> routeFallback(double fromLat,double fromLng,double toLat,double toLng,Throwable t)
+    {
+        log.warn("OSRM routing failed for {},{} -> {},{} : {} — falling back to straight line",
+                fromLat, fromLng, toLat, toLng, t.toString());
+        return Optional.empty();
+    }
+    private Optional<Route> routeFallback(double fromLat, double fromLng, double toLat, double toLng,
+                                          CallNotPermittedException e) {
+        log.debug("OSRM circuit OPEN — instant straight-line fallback");
+        return Optional.empty();
     }
 
 

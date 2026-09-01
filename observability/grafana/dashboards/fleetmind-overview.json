@@ -85,6 +85,38 @@
           "legendFormat": "{{application}} max"
         }
       ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "P15 · Redis cache hit rate (per cache)",
+      "description": "hits / (hits + misses) over 1m, from cache_gets_total (RedisCacheManager enableStatistics + Micrometer). Climbs toward 1.0 under dashboard load; every hit is a Postgres query that never ran. Flat 0 with traffic = cache broken; no data = nobody is reading that cache.",
+      "datasource": { "type": "prometheus", "uid": "fleetmind-prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 18 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (cache) (rate(cache_gets_total{application=\"command-service\",result=\"hit\"}[1m])) / sum by (cache) (rate(cache_gets_total{application=\"command-service\",result=~\"hit|miss\"}[1m]))",
+          "legendFormat": "{{cache}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "P15 · Outbox leader (1 = holds the lease)",
+      "description": "outbox_leader gauge, one series per instance_id (host-pid-uuid). Healthy: exactly one series at 1. Kill the leader and watch the crown hop to the other instance within one lease TTL (≤10s). BOTH at 1 = Redis is down and the lease is failing open (efficiency lock: everyone drains, SKIP LOCKED keeps it correct).",
+      "datasource": { "type": "prometheus", "uid": "fleetmind-prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 18 },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0, "max": 1, "custom": { "stepAfter": true } }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "outbox_leader",
+          "legendFormat": "{{instance_id}}"
+        }
+      ]
     }
   ]
 }
