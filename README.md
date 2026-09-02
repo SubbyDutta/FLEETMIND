@@ -12,9 +12,8 @@ The part I care about most: **the AI never touches the database directly.** A re
 ![Redis](https://img.shields.io/badge/Redis-cache%20%2B%20leader%20lease-DC382D)
 ![Python](https://img.shields.io/badge/Python-agents%20%2B%20RAG-3776AB)
 
-<!-- demo GIF goes here: ~15s, freeze rider → STUCK alert → agent investigates → reassign lands on the map.
-     Record with the stack up: ScreenToGif or `ffmpeg -f gdigrab`, keep it under ~8MB so GitHub autoplays it.
-     Optionally follow with a 2-min mp4 dragged into the README (GitHub renders an inline player). -->
+<!-- ═══ GIF-1 · HERO DEMO ═══ save the file as docs/demo-dispatch.gif, then uncomment the line below -->
+<!-- ![Freeze a rider → STUCK alert → agent investigates → reassignment lands on the map](docs/demo-dispatch.gif) -->
 
 ## What happens in a dispatch
 
@@ -190,6 +189,12 @@ The notification service consumes alerts, order terminals, and dispatch actions 
 ### If something breaks, I want to see where
 
 Micrometer metrics into Prometheus, provisioned Grafana dashboards (consumer lag, HTTP percentiles, per-cache hit rate, which instance holds the outbox lease, breaker states), OpenTelemetry traces into Jaeger. The dispatch round-trip is a single 4-span trace across two services and two Kafka hops.
+
+<!-- ═══ IMG-2 · JAEGER TRACE ═══ save as docs/trace-dispatch.png, then uncomment -->
+<!-- ![The dispatch round-trip as one 4-span trace in Jaeger](docs/trace-dispatch.png) -->
+
+<!-- ═══ IMG-3 · GRAFANA DASHBOARD ═══ save as docs/grafana-overview.png, then uncomment -->
+<!-- ![Grafana: cache hit rate, outbox leader per instance, consumer lag, breaker states](docs/grafana-overview.png) -->
 
 The gaps are documented instead of hidden: the outbox breaks the trace (a scheduled poller has no request context — the fix is persisting `traceparent` on the outbox row, consciously not built), and the Kafka Streams hop is untraced.
 
