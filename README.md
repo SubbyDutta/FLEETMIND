@@ -12,6 +12,10 @@ The part I care about most: **the AI never touches the database directly.** A re
 ![Redis](https://img.shields.io/badge/Redis-cache%20%2B%20leader%20lease-DC382D)
 ![Python](https://img.shields.io/badge/Python-agents%20%2B%20RAG-3776AB)
 
+<!-- demo GIF goes here: ~15s, freeze rider → STUCK alert → agent investigates → reassign lands on the map.
+     Record with the stack up: ScreenToGif or `ffmpeg -f gdigrab`, keep it under ~8MB so GitHub autoplays it.
+     Optionally follow with a 2-min mp4 dragged into the README (GitHub renders an inline player). -->
+
 ## What happens in a dispatch
 
 ```
@@ -46,7 +50,7 @@ order event                                heals the stream state too
 map updates · customer gets an email       MailHog in dev
 ```
 
-The whole chain shows up in Jaeger as one distributed trace. Nothing in it is mocked.
+The whole chain is real, and it shows up in Jaeger as one distributed trace.
 
 ## Some numbers before the words
 
@@ -111,7 +115,7 @@ Before the outbox relay, the agent's first real reassignment committed to Postgr
 
 ### One publisher, no matter how many replicas
 
-Scale the command service to N replicas and you get N outbox publishers double-sending. So there's a small Redis leader lease: `SET NX EX` to acquire, a Lua compare-and-swap to renew, `host-pid-uuid` as the lease value, and **no explicit release** — a dying leader just lets the TTL lapse.
+Scale the command service to N replicas and, without coordination, every instance tries to publish the same outbox rows. So there's a small Redis leader lease: `SET NX EX` to acquire, a Lua compare-and-swap to renew, `host-pid-uuid` as the lease value, and **no explicit release** — a dying leader just lets the TTL lapse.
 
 Tested it the honest way: ran two instances, killed the leader, watched the second take over within one TTL. When the old instance came back, it correctly stayed a follower.
 
@@ -177,7 +181,7 @@ The agent's write path gets bounded retries (1s → 2s → 4s) and a dead-letter
 Spring's `@RetryableTopic` retries on separate topics, which trades per-key ordering for throughput. Dispatch actions for one order must apply in sequence — a REASSIGN retried after a later CANCEL is a corrupted order. Blocking retries keep the partition's ordering guarantee; the DLT catches what outlives the ladder.
 </details>
 
-Circuit breakers guard both external edges, and both taught me something. The OSRM breaker only worked after moving the existing try/catch *outside* it — a breaker that never sees failures never opens. The AI-service breaker wraps stream *consumption*, not the call, because gRPC blocking stubs are lazy and failures surface on `hasNext()`. When it's open, the API returns an honest 503 with `circuit_open: true` in ~14ms instead of hanging a dispatcher's browser for two minutes. Watched live through the whole state machine: CLOSED → OPEN → timed HALF_OPEN → probes → CLOSED.
+Circuit breakers guard both external edges. The interesting one wraps the AI-service stream's *consumption*, not the call — gRPC blocking stubs are lazy, so failures surface on `hasNext()`. When it's open, the API returns an honest 503 with `circuit_open: true` in ~14ms instead of hanging a dispatcher's browser for two minutes. Watched live through the whole state machine: CLOSED → OPEN → timed HALF_OPEN → probes → CLOSED.
 
 ### Notifications, or: at-least-once means you'll send it twice
 
@@ -225,7 +229,7 @@ The Java/Python split is deliberate. Python owns the agents and read tools becau
 
 **RAG:** operational runbooks are chunked and indexed per tenant into pgvector. Retrieval is hybrid — vector similarity and Postgres full-text search, fused with reciprocal rank fusion — because incident queries mix natural language ("rider not moving") with exact tokens ("RB-STUCK") and neither retriever wins alone. The dispatch prompt requires a runbook citation before any action, and a grader fails any transcript where an action precedes a runbook search.
 
-**Evals:** 30 frozen scenarios in 6 partitions — happy paths, one-scenario-per-prompt-rule regressions, refusals, prompt injection *inside tool results*, analytics grounding, cross-tenant isolation. The real model runs through the production loop against canned tool worlds (canned tools clone each real tool's name, description, and schema, so the model sees production-identical declarations, while runbook retrieval stays real). Every episode is graded twice: mechanically on *actions* (tool order, arguments, forbidden calls), by an LLM judge on *words* (correctness and groundedness — fabricated figures cap the score). The harness itself is mutation-tested: a zero-cost dry run has to catch 4 planted violations before any API quota gets spent, and it does. First live scenario: passed both graders — a 9-step episode with 2 real retrievals that adapted to an unscripted tool error without derailing. The gate is 85% rather than 100% because model outputs aren't perfectly deterministic; the full scorecard is being run in daily free-tier batches and gets pasted here, real, when it's done.
+**Evals:** 30 frozen scenarios in 6 partitions — happy paths, one-scenario-per-prompt-rule regressions, refusals, prompt injection *inside tool results*, analytics grounding, cross-tenant isolation. The real model runs through the production loop against canned tool worlds (canned tools clone the real tools' schemas, so the model sees production-identical declarations; runbook retrieval stays real). Every episode is graded twice: mechanically on *actions*, by an LLM judge on *words* — and fabricated figures cap the score. The harness itself is mutation-tested: a zero-cost dry run has to catch 4 planted violations before any API quota gets spent, and it does. First live scenario: passed both graders — a 9-step episode with 2 real retrievals that adapted to an unscripted tool error without derailing. The gate is 85% rather than 100% because model outputs aren't perfectly deterministic; the full scorecard is being run in daily free-tier batches and gets pasted here, real, when it's done.
 
 ## Things that surprised me
 
@@ -235,6 +239,14 @@ The Java/Python split is deliberate. Python owns the agents and read tools becau
 - **A circuit breaker can be perfectly configured and useless.** My first version caught the exception before the breaker ever saw it.
 - **"The model refuses" is not a security boundary.** Tool restrictions have to exist in the registry and the database session, where the model can't talk its way past them.
 - **Free-tier LLM quotas fail in the worst way**: a retry policy that looked sensible sustained its own outage by keeping the rate-limit bucket full. Uniform ~17s failures across the board turned out to be my retry budget expiring, not the model.
+
+## The decisions I'd defend
+
+- **Transactional outbox** over publish-after-commit — the gap between "row committed" and "event sent" is exactly where the double-booking bug lived.
+- **RS256** over a shared HMAC secret — three services validate tokens, one mints them; a compromised validator holds a public key and can forge nothing.
+- **Blocking retries** over `@RetryableTopic` — on the dispatch path, per-order ordering beats throughput.
+- **Fail-open lease, fail-quiet cache** — Redis dying should mean duplicate publishes and slower reads, never a stalled outbox or a failed request.
+- **AI writes cross gRPC into Java** — the model gets a typed, validated, transactional door, never a database connection.
 
 ## Stack
 
