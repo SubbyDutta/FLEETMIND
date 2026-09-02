@@ -4,6 +4,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.rag.retrieval import search
+from app.tenancy import require_tenant
 from app.tools.base import register
 
 _MAX_CONTENT_CHARS = 600
@@ -24,7 +25,7 @@ class SearchRunbooks:
     args_model=SearchRunbooksArgs
 
     def call(self,args:SearchRunbooksArgs)->dict[str,Any]:
-        results=search(args.query,k=args.k)
+        results=search(args.query,require_tenant(),k=args.k)
         return {
             "chunks": [
                 {

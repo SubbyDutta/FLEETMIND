@@ -34,7 +34,7 @@ public class DriverRepository {
                 ping.getSpeedKmph()
         );
     }
-    @Cacheable(cacheNames = "drivers", key = "'all'")
+    @Cacheable(cacheNames = "drivers", key = "T(com.TenantContext).require() + ':all'")
     public List<Map<String,Object>> findAll()
     {
         return jdbc.queryForList(
@@ -44,8 +44,10 @@ public class DriverRepository {
                            ST_X(location::geometry) AS lng,
                            speed_kmph, updated_at
                     FROM drivers
+                    WHERE tenant_id = ?
                     ORDER BY id
-                    """
+                    """,
+                TenantContext.require()
         );
     }
     public Map<String,Object> findById(String driverId)
@@ -56,8 +58,8 @@ public class DriverRepository {
                          ST_Y(location::geometry) AS lat,
                          ST_X(location::geometry) AS lng
                   FROM drivers
-                  WHERE id=?
-            """,driverId
+                  WHERE tenant_id=? AND id=?
+            """,TenantContext.require(),driverId
         );
         if(rows.isEmpty())
         {

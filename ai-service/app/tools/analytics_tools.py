@@ -3,6 +3,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.db import pool
+from app.tenancy import require_tenant
 from app.tools.base import register
 
 # The DB has no zone column — restaurants are the grouping key, and the
@@ -55,10 +56,12 @@ class SlaBreaches:
             SELECT o.restaurant, count(*)
             FROM alerts a
             JOIN orders o ON o.id = a.order_id
-            WHERE a.type = 'SLA_BREACH'
+            WHERE a.tenant_id = %s
+              AND o.tenant_id = %s
+              AND a.type = 'SLA_BREACH'
               AND a.created_at >= now() - make_interval(mins => %s)
             GROUP BY o.restaurant
-        """, (args.window_minutes,))
+        """, (require_tenant(), require_tenant(), args.window_minutes))
         by_zone: dict[str, dict[str, Any]] = {}
         for restaurant, n in rows:
             z = by_zone.setdefault(ZONE_OF.get(restaurant, "Unknown"),
@@ -94,9 +97,10 @@ class EtaHealth:
                    avg(extract(epoch FROM (current_eta - promised_eta))),
                    count(*) FILTER (WHERE current_eta > sla_deadline)
             FROM orders
-            WHERE status NOT IN ('DELIVERED', 'CANCELLED')
+            WHERE tenant_id = %s
+              AND status NOT IN ('DELIVERED', 'CANCELLED')
               AND current_eta IS NOT NULL
-        """)
+        """, (require_tenant(),))
         return {
             "active_orders": active,
             "avg_delay_seconds": round(float(avg_delay), 1) if avg_delay is not None else None,
@@ -118,7 +122,8 @@ class DriverUtilization:
 
     def call(self, args: UtilizationArgs) -> dict[str, Any]:
         counts = {status: n for status, n in
-                  _rows("SELECT status, count(*) FROM drivers GROUP BY status")}
+                  _rows("SELECT status, count(*) FROM drivers WHERE tenant_id = %s GROUP BY status",
+                        (require_tenant(),))}
         busy = counts.get("TO_PICKUP", 0) + counts.get("TO_DROP", 0)
         online = busy + counts.get("IDLE", 0)
         return {

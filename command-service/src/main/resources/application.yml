@@ -94,6 +94,12 @@ resilience4j:
           - io.grpc.StatusRuntimeException
         register-health-indicator: true
 
+fleetmind:
+  auth:
+    token-ttl-minutes: 60
+    seed-demo-users: true
+    demo-password: demo123
+
 # net.devh starter reads grpc.* from the TOP level — not under spring.*
 grpc:
   server:

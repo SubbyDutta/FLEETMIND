@@ -19,8 +19,8 @@ public class DriverOverviewService {
     public DriverOverviewResponse getOverview(String driverId) {
         List<Map<String, Object>> rows = jdbc.queryForList("""
                 SELECT id, name, status, speed_kmph, updated_at
-                FROM drivers WHERE id = ?
-                """, driverId);
+                FROM drivers WHERE tenant_id = ? AND id = ?
+                """, TenantContext.require(), driverId);
         if (rows.isEmpty()) {
             return DriverOverviewResponse.newBuilder().setFound(false).build();
         }
@@ -37,10 +37,10 @@ public class DriverOverviewService {
         jdbc.queryForList("""
                 SELECT id, status, restaurant, current_eta, sla_deadline
                 FROM orders
-                WHERE assigned_driver = ? AND status NOT IN ('DELIVERED', 'CANCELLED')
+                WHERE tenant_id = ? AND assigned_driver = ? AND status NOT IN ('DELIVERED', 'CANCELLED')
                 ORDER BY updated_at DESC
                 LIMIT 1
-                """, driverId)
+                """, TenantContext.require(), driverId)
                 .forEach(o -> resp.setCurrentOrder(CurrentOrder.newBuilder()
                         .setOrderId((String) o.get("id"))
                         .setStatus((String) o.get("status"))
@@ -52,9 +52,9 @@ public class DriverOverviewService {
         jdbc.queryForList("""
                 SELECT type, severity, reason, created_at
                 FROM alerts
-                WHERE driver_id = ? AND resolved = false
+                WHERE tenant_id = ? AND driver_id = ? AND resolved = false
                 ORDER BY created_at DESC
-                """, driverId)
+                """, TenantContext.require(), driverId)
                 .forEach(a -> resp.addOpenAlerts(Alert.newBuilder()
                         .setType((String) a.get("type"))
                         .setSeverity((String) a.get("severity"))

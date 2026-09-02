@@ -5,10 +5,12 @@ from typing import ClassVar as _ClassVar, Optional as _Optional
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class ChatRequest(_message.Message):
-    __slots__ = ("question",)
+    __slots__ = ("question", "tenant_id")
     QUESTION_FIELD_NUMBER: _ClassVar[int]
+    TENANT_ID_FIELD_NUMBER: _ClassVar[int]
     question: str
-    def __init__(self, question: _Optional[str] = ...) -> None: ...
+    tenant_id: str
+    def __init__(self, question: _Optional[str] = ..., tenant_id: _Optional[str] = ...) -> None: ...
 
 class ChatEvent(_message.Message):
     __slots__ = ("type", "step", "tool_name", "payload_json")

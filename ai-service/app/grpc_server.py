@@ -10,6 +10,7 @@ from app.tools import DISPATCH_TOOLS
 from app.config import settings
 from app.db import pool
 from app.proto_gen import agent_pb2, agent_pb2_grpc, status_pb2, status_pb2_grpc
+from app.tenancy import reset_tenant, set_tenant
 from app.tools import base
 
 
@@ -17,29 +18,42 @@ class AgentServicer(agent_pb2_grpc.AgentServiceServicer):
     def Chat(self, request, context):
         if not request.question.strip():
             context.abort(grpc.StatusCode.INVALID_ARGUMENT, "question is empty")
-        # Explicit toolset: the default (None -> full registry) would leak the
-        # analytics tools into the dispatch agent's declarations.
-        for ev in run_agent(request.question, tools=DISPATCH_TOOLS):
-            if not context.is_active():   # Java client hung up — stop burning tokens
-                return
-            yield agent_pb2.ChatEvent(
-                type=ev.type.upper(),
-                step=ev.step,
-                tool_name=ev.tool_name,
-                payload_json=json.dumps(ev.payload),
-            )
+        if not request.tenant_id.strip():
+            context.abort(grpc.StatusCode.INVALID_ARGUMENT, "tenant_id is required")
+        token = set_tenant(request.tenant_id)
+        try:
+            # Explicit toolset: the default (None -> full registry) would leak the
+            # analytics tools into the dispatch agent's declarations.
+            for ev in run_agent(request.question, tools=DISPATCH_TOOLS):
+                if not context.is_active():   # Java client hung up — stop burning tokens
+                    return
+                yield agent_pb2.ChatEvent(
+                    type=ev.type.upper(),
+                    step=ev.step,
+                    tool_name=ev.tool_name,
+                    payload_json=json.dumps(ev.payload),
+                )
+        finally:
+            reset_tenant(token)
+
     def Analytics(self, request, context):
         if not request.question.strip():
             context.abort(grpc.StatusCode.INVALID_ARGUMENT, "question is empty")
-        for e in run_analytics_agent(request.question):
-            if not context.is_active(): return
-            yield  agent_pb2.ChatEvent(
-                type=e.type.upper(),
-                step=e.step,
-                tool_name=e.tool_name,
-                payload_json=json.dumps(e.payload),
+        if not request.tenant_id.strip():
+            context.abort(grpc.StatusCode.INVALID_ARGUMENT, "tenant_id is required")
+        token = set_tenant(request.tenant_id)
+        try:
+            for e in run_analytics_agent(request.question):
+                if not context.is_active(): return
+                yield  agent_pb2.ChatEvent(
+                    type=e.type.upper(),
+                    step=e.step,
+                    tool_name=e.tool_name,
+                    payload_json=json.dumps(e.payload),
 
-            )
+                )
+        finally:
+            reset_tenant(token)
 
 
 

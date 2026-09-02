@@ -8,10 +8,15 @@ from pydantic import BaseModel, Field
 from app.config import settings
 from app.proto_gen import telemetry_pb2_grpc, telemetry_pb2
 from app.proto_gen import tools_pb2, tools_pb2_grpc
+from app.tenancy import require_tenant
 from app.tools.base import register
 
 
 _DEADLINE_SECONDS = 3.0
+
+
+def _tenant_metadata() -> tuple[tuple[str, str], ...]:
+    return (("x-tenant-id", require_tenant()),)
 
 _CONFIRM_FIELD = Field(
     description="Human-in-the-loop flag. Must be explicitly true to execute "
@@ -74,6 +79,7 @@ class ReassignOrder:
                     reason=args.reason,
                 ),
                 timeout=_DEADLINE_SECONDS,
+                metadata=_tenant_metadata(),
             )
         except grpc.RpcError as e:
             return _transport_error(e)
@@ -116,7 +122,8 @@ class Telemetry:
         try:
             # The stream itself takes ~1s per sample — the deadline must outlive
             # it, so it scales with `samples` instead of the flat unary deadline.
-            for ping in _stub2().WatchDriver(request, timeout=args.samples * 1.0 + 3.0):
+            for ping in _stub2().WatchDriver(request, timeout=args.samples * 1.0 + 3.0,
+                                             metadata=_tenant_metadata()):
                 pings.append({
                     "lat": ping.lat,
                     "lng": ping.lng,
@@ -170,6 +177,7 @@ class NotifyCustomer:
                     reason=args.reason,
                 ),
                 timeout=_DEADLINE_SECONDS,
+                metadata=_tenant_metadata(),
             )
         except grpc.RpcError as e:
             return _transport_error(e)
@@ -194,6 +202,7 @@ class GetOrderStatus:
             resp = _stub().GetOrderStatus(
                 tools_pb2.OrderStatusRequest(order_id=args.order_id),
                 timeout=_DEADLINE_SECONDS,
+                metadata=_tenant_metadata(),
             )
         except grpc.RpcError as e:
             return _transport_error(e)
@@ -236,6 +245,7 @@ class GetDriverOverview:
             resp = _stub().GetDriverOverview(
                 tools_pb2.DriverOverviewRequest(driver_id=args.driver_id),
                 timeout=_DEADLINE_SECONDS,
+                metadata=_tenant_metadata(),
             )
         except grpc.RpcError as e:
             return _transport_error(e)

@@ -8,7 +8,6 @@ import com.google.protobuf.Empty;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import net.devh.boot.grpc.client.inject.GrpcClient;
 import org.springframework.http.MediaType;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -24,7 +23,6 @@ import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/api/agent")
-@CrossOrigin(origins = "*")
 public class AgentController {
 
     @GrpcClient("ai-service")
@@ -44,9 +42,10 @@ public class AgentController {
     @GetMapping(value = "/chat", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter chat(@RequestParam String q) {
         SseEmitter emitter = new SseEmitter(120_000L);
+        String tenant = TenantContext.require();
         executor.submit(() -> {
             try {
-                agentGateway.chat(q, ev -> {
+                agentGateway.chat(q, tenant, ev -> {
                     try {
                         ObjectNode body = mapper.createObjectNode()
                                 .put("step", ev.getStep())

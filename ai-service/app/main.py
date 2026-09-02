@@ -32,5 +32,6 @@ def health() -> dict:
 def retrieve(
     q: str = Query(min_length=1),          # empty query -> 422, not a silent []
     k: int = Query(DEFAULT_TOP_K, ge=1, le=20),
+    tenant: str = Query("acme", min_length=1),
 ) -> list[dict]:
-    return [asdict(r) for r in search(q, k)]
+    return [asdict(r) for r in search(q, tenant, k)]

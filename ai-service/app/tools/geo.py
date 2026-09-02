@@ -3,18 +3,19 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.db import pool
+from app.tenancy import require_tenant
 from app.tools.base import register
 
 _PICKUP_SQL="""
 SELECT ST_X(pickup::geometry) AS lng, ST_Y(pickup::geometry) AS lat
 FROM orders
-WHERE id=%(order_id)s;
+WHERE tenant_id=%(tenant)s AND id=%(order_id)s;
 """
 _KNN_SQL="""
 SELECT id,name,
 ST_Distance(location,ST_MakePoint(%(lng)s,%(lat)s)::geography) AS meters
 FROM drivers
-WHERE status ='IDLE'
+WHERE tenant_id=%(tenant)s AND status ='IDLE'
 ORDER BY location <-> ST_MakePoint(%(lng)s, %(lat)s)::geography
     LIMIT %(limit)s;
 """
@@ -33,14 +34,15 @@ class FindNearByDriver:
     )
     args_model=FindNearByDriverArgs
     def call(self,args:FindNearByDriverArgs)->dict[str,Any]:
+        tenant = require_tenant()
         with pool.connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(_PICKUP_SQL, {"order_id": args.order_id})
+                cur.execute(_PICKUP_SQL, {"order_id": args.order_id, "tenant": tenant})
                 row=cur.fetchone()
                 if row is None:
                     return{"error": f"order{args.order_id} not found","drivers":[]}
                 lng,lat=row
-                cur.execute(_KNN_SQL, {"lng": lng, "lat": lat, "limit": args.limit})
+                cur.execute(_KNN_SQL, {"lng": lng, "lat": lat, "limit": args.limit, "tenant": tenant})
                 drivers = cur.fetchall()
 
         return {

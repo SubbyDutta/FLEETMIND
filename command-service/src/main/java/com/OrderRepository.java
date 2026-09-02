@@ -62,7 +62,7 @@ public class OrderRepository {
                 eta.getOrderId()
                 );
     }
-    @Cacheable(cacheNames = "orders", key = "'active'")
+    @Cacheable(cacheNames = "orders", key = "T(com.TenantContext).require() + ':active'")
     public List<Map<String,Object>> findActive()
     {
         return jdbc.queryForList(
@@ -72,10 +72,11 @@ public class OrderRepository {
                       ST_Y(dropoff::geometry) AS dropoff_lat, ST_X(dropoff::geometry) AS dropoff_lng,
                       sla_deadline,current_eta,updated_at
                FROM orders
-               WHERE status <> 'DELIVERED'
+               WHERE tenant_id = ? AND status <> 'DELIVERED'
                ORDER BY updated_at DESC
 
-"""
+""",
+                TenantContext.require()
         );
     }
     public Map<String, Object> findActiveByDriver(String driverId) {
@@ -85,11 +86,13 @@ public class OrderRepository {
                        ST_Y(pickup::geometry)  AS pickup_lat,  ST_X(pickup::geometry)  AS pickup_lng,
                        ST_Y(dropoff::geometry) AS dropoff_lat, ST_X(dropoff::geometry) AS dropoff_lng
                 FROM orders
-                WHERE assigned_driver = ?
+                WHERE tenant_id = ?
+                  AND assigned_driver = ?
                   AND status <> 'DELIVERED'
                 ORDER BY updated_at DESC
                 LIMIT 1
                 """,
+                TenantContext.require(),
                 driverId
         );
         if (rows.isEmpty()) {

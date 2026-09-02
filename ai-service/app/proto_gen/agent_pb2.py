@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0b\x61gent.proto\x12\x0f\x66leetmind.agent\"\x1f\n\x0b\x43hatRequest\x12\x10\n\x08question\x18\x01 \x01(\t\"P\n\tChatEvent\x12\x0c\n\x04type\x18\x01 \x01(\t\x12\x0c\n\x04step\x18\x02 \x01(\x05\x12\x11\n\ttool_name\x18\x03 \x01(\t\x12\x14\n\x0cpayload_json\x18\x04 \x01(\t2\x9b\x01\n\x0c\x41gentService\x12\x42\n\x04\x43hat\x12\x1c.fleetmind.agent.ChatRequest\x1a\x1a.fleetmind.agent.ChatEvent0\x01\x12G\n\tAnalytics\x12\x1c.fleetmind.agent.ChatRequest\x1a\x1a.fleetmind.agent.ChatEvent0\x01\x42\x17\n\x13\x63om.fleetmind.agentP\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0b\x61gent.proto\x12\x0f\x66leetmind.agent\"2\n\x0b\x43hatRequest\x12\x10\n\x08question\x18\x01 \x01(\t\x12\x11\n\ttenant_id\x18\x02 \x01(\t\"P\n\tChatEvent\x12\x0c\n\x04type\x18\x01 \x01(\t\x12\x0c\n\x04step\x18\x02 \x01(\x05\x12\x11\n\ttool_name\x18\x03 \x01(\t\x12\x14\n\x0cpayload_json\x18\x04 \x01(\t2\x9b\x01\n\x0c\x41gentService\x12\x42\n\x04\x43hat\x12\x1c.fleetmind.agent.ChatRequest\x1a\x1a.fleetmind.agent.ChatEvent0\x01\x12G\n\tAnalytics\x12\x1c.fleetmind.agent.ChatRequest\x1a\x1a.fleetmind.agent.ChatEvent0\x01\x42\x17\n\x13\x63om.fleetmind.agentP\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -33,9 +33,9 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'\n\023com.fleetmind.agentP\001'
   _globals['_CHATREQUEST']._serialized_start=32
-  _globals['_CHATREQUEST']._serialized_end=63
-  _globals['_CHATEVENT']._serialized_start=65
-  _globals['_CHATEVENT']._serialized_end=145
-  _globals['_AGENTSERVICE']._serialized_start=148
-  _globals['_AGENTSERVICE']._serialized_end=303
+  _globals['_CHATREQUEST']._serialized_end=82
+  _globals['_CHATEVENT']._serialized_start=84
+  _globals['_CHATEVENT']._serialized_end=164
+  _globals['_AGENTSERVICE']._serialized_start=167
+  _globals['_AGENTSERVICE']._serialized_end=322
 # @@protoc_insertion_point(module_scope)

@@ -18,7 +18,7 @@ from evals.world import build_world
 
 KNOWN_EXPECT = {"must_call", "must_not_call", "runbook_before_action",
                 "retrieved_doc_any", "action_args", "min_calls", "max_calls",
-                "forbidden_args"}
+                "forbidden_args", "forbidden_docs"}
 
 
 def lint(sc: dict) -> list[str]:

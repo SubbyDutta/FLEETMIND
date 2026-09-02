@@ -19,8 +19,8 @@ public class OrderStatusService {
         List<Map<String, Object>> rows = jdbc.queryForList("""
                 SELECT id, status, customer_name, restaurant, assigned_driver,
                        sla_deadline, promised_eta, current_eta
-                FROM orders WHERE id = ?
-                """, orderId);
+                FROM orders WHERE tenant_id = ? AND id = ?
+                """, TenantContext.require(), orderId);
         if (rows.isEmpty()) {
             return OrderStatusResponse.newBuilder().setFound(false).build();
         }
@@ -38,9 +38,9 @@ public class OrderStatusService {
         jdbc.queryForList("""
                 SELECT type, severity, reason, created_at
                 FROM alerts
-                WHERE order_id = ? AND resolved = false
+                WHERE tenant_id = ? AND order_id = ? AND resolved = false
                 ORDER BY created_at DESC
-                """, orderId
+                """, TenantContext.require(), orderId
         ).forEach(a -> resp.addOpenAlerts(Alert.newBuilder()
                 .setType((String) a.get("type"))
                 .setSeverity((String) a.get("severity"))

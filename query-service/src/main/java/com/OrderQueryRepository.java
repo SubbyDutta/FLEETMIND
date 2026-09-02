@@ -47,17 +47,18 @@ public class OrderQueryRepository {
         return jdbc.query(
                 "SELECT " + COLS + """
                 FROM orders
-                WHERE status NOT IN ('DELIVERED','CANCELLED')
+                WHERE tenant_id = :tenant
+                  AND status NOT IN ('DELIVERED','CANCELLED')
                 ORDER BY updated_at DESC
                 LIMIT :limit
                 """,
-                Map.of("limit", limit), MAPPER);
+                Map.of("limit", limit, "tenant", CurrentTenant.require()), MAPPER);
     }
 
     public Order findById(String id) {
         List<Order> rows = jdbc.query(
-                "SELECT " + COLS + " FROM orders WHERE id = :id",
-                Map.of("id", id), MAPPER);
+                "SELECT " + COLS + " FROM orders WHERE tenant_id = :tenant AND id = :id",
+                Map.of("id", id, "tenant", CurrentTenant.require()), MAPPER);
         return rows.isEmpty() ? null : rows.getFirst();
     }
 
@@ -65,9 +66,10 @@ public class OrderQueryRepository {
         return jdbc.query(
                 "SELECT " + COLS + """
                 FROM orders
-                WHERE status NOT IN ('DELIVERED','CANCELLED')
+                WHERE tenant_id = :tenant
+                  AND status NOT IN ('DELIVERED','CANCELLED')
                   AND assigned_driver IN (:ids)
                 """,
-                Map.of("ids", driverIds), MAPPER);
+                Map.of("ids", driverIds, "tenant", CurrentTenant.require()), MAPPER);
     }
 }

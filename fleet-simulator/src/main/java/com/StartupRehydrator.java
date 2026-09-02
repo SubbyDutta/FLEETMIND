@@ -7,9 +7,12 @@ import fleetmind.events.OrderStatus;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -33,6 +36,13 @@ public class StartupRehydrator {
     private final RoutingClient routingClient;
     private final SimulationReadiness readiness;
     private final KafkaListenerEndpointRegistry listenerRegistry;
+
+    @Value("${fleetmind.auth.service-email:svc-simulator@fleetmind.internal}")
+    private String serviceEmail;
+
+    @Value("${fleetmind.auth.service-password:demo123}")
+    private String servicePassword;
+
     @EventListener(ApplicationReadyEvent.class)
     public void recover(){
         SimpleClientHttpRequestFactory factory= new SimpleClientHttpRequestFactory();
@@ -43,8 +53,14 @@ public class StartupRehydrator {
                 .baseUrl("http://localhost:8086")
                 .requestFactory(factory)
                 .build();
-        List<Map<String,Object>> orders=fetchList(http,"/api/orders");
-        List<Map<String,Object>> drivers=fetchList(http,"/api/drivers");
+        String token=obtainServiceToken(http);
+        if(token==null)
+        {
+            log.warn("Rehydration skipped: could not obtain service token from command-service");
+            return;
+        }
+        List<Map<String,Object>> orders=fetchList(http,token,"/api/orders");
+        List<Map<String,Object>> drivers=fetchList(http,token,"/api/drivers");
         if(orders == null || drivers == null)
         {
             log.warn("Rehydration skipped: command-service unreachable");
@@ -90,14 +106,46 @@ public class StartupRehydrator {
 
     }
 
-private List<Map<String,Object>> fetchList(RestClient http,String uri)
+private String obtainServiceToken(RestClient http)
+{
+    ParameterizedTypeReference<Map<String,Object>> mapType=new ParameterizedTypeReference<Map<String, Object>>() {};
+    int attempt=0;
+    while(attempt<20){
+        attempt++;
+        try{
+            Map<String,Object> resp=http.post().uri("/api/auth/login")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of("email",serviceEmail,"password",servicePassword))
+                    .retrieve().body(mapType);
+            if(resp!=null && resp.get("token")!=null)
+            {
+                return (String) resp.get("token");
+            }
+        }catch(Exception e)
+        {
+            log.warn("Command-service login not ready cus");
+        }
+        try{
+            Thread.sleep(2000);
+        }catch(InterruptedException ef)
+        {
+            Thread.currentThread().interrupt();
+            return null;
+        }
+    }
+    return null;
+}
+
+private List<Map<String,Object>> fetchList(RestClient http,String token,String uri)
 {
     ParameterizedTypeReference<List<Map<String,Object>>> listType=new ParameterizedTypeReference<List<Map<String, Object>>>() {};
     int attempt =0;
     while(attempt<20){
         attempt++;
                 try{
-                    return http.get().uri(uri).retrieve().body(listType);
+                    return http.get().uri(uri)
+                            .header(HttpHeaders.AUTHORIZATION,"Bearer "+token)
+                            .retrieve().body(listType);
                 }catch(Exception e)
                 {
                     log.warn("Command-service not ready cus");

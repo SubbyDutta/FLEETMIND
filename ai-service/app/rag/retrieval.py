@@ -17,7 +17,7 @@ class Result:
 
 # Stateless module-level functions (no class): nothing here has state to hold,
 # matching the loader/embeddings style.
-def vector_search(query:str,limit:int=DEFAULT_RETRIEVAL_LIMIT) -> list[Result]:
+def vector_search(query:str,tenant:str,limit:int=DEFAULT_RETRIEVAL_LIMIT) -> list[Result]:
     if not query.strip():
         return []
     if limit <=0:
@@ -31,13 +31,13 @@ def vector_search(query:str,limit:int=DEFAULT_RETRIEVAL_LIMIT) -> list[Result]:
         content,
         1-(embedding <=> %(qvec)s::vector) AS score
     FROM knowledge_chunks
-    WHERE embedding IS NOT NULL
+    WHERE tenant_id = %(tenant)s AND embedding IS NOT NULL
     ORDER BY embedding <=>%(qvec)s::vector
     LIMIT %(limit)s;
     """
     with pool.connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(sql,{'qvec': str(query_vector),'limit':limit},)
+            cur.execute(sql,{'qvec': str(query_vector),'limit':limit,'tenant':tenant},)
 
             rows =cur.fetchall()
 
@@ -52,7 +52,7 @@ def vector_search(query:str,limit:int=DEFAULT_RETRIEVAL_LIMIT) -> list[Result]:
         for row in rows
     ]
 
-def keyword_search(query:str,limit:int=DEFAULT_RETRIEVAL_LIMIT) -> list[Result]:
+def keyword_search(query:str,tenant:str,limit:int=DEFAULT_RETRIEVAL_LIMIT) -> list[Result]:
     if not query.strip():
         return[]
     if limit<=0:
@@ -65,12 +65,12 @@ def keyword_search(query:str,limit:int=DEFAULT_RETRIEVAL_LIMIT) -> list[Result]:
         content,
         ts_rank(tsv, plainto_tsquery('english',%(q)s)) AS score
         FROM knowledge_chunks
-        WHERE tsv @@ plainto_tsquery('english',%(q)s)
+        WHERE tenant_id = %(tenant)s AND tsv @@ plainto_tsquery('english',%(q)s)
         ORDER BY score DESC LIMIT %(limit)s;
     """
     with pool.connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(sql,{'q': str(query),'limit':limit},)
+            cur.execute(sql,{'q': str(query),'limit':limit,'tenant':tenant},)
             rows=cur.fetchall()
 
     return[
@@ -86,6 +86,7 @@ def keyword_search(query:str,limit:int=DEFAULT_RETRIEVAL_LIMIT) -> list[Result]:
 
 def search(
         query:str,
+        tenant:str,
         k:int = DEFAULT_TOP_K
 )->list[Result]:
         if not query.strip():
@@ -94,8 +95,8 @@ def search(
         if k <= 0:
             raise ValueError("k must be greater than 0")
 
-        vector_results=vector_search(query,limit=DEFAULT_RETRIEVAL_LIMIT)
-        key_results=keyword_search(query,limit=DEFAULT_RETRIEVAL_LIMIT)
+        vector_results=vector_search(query,tenant,limit=DEFAULT_RETRIEVAL_LIMIT)
+        key_results=keyword_search(query,tenant,limit=DEFAULT_RETRIEVAL_LIMIT)
 
         fused_scores:defaultdict[int,float]=defaultdict(float)
         chunks: dict[int,Result]={}

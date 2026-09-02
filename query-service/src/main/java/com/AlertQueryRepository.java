@@ -33,16 +33,16 @@ public class AlertQueryRepository {
         return jdbc.query(
                 "SELECT " + COLS + """
                  FROM alerts
-                 WHERE resolved = false
+                 WHERE tenant_id = :tenant AND resolved = false
                  ORDER BY created_at DESC
                  LIMIT :limit
                 """,
-                Map.of("limit", limit), MAPPER);
+                Map.of("limit", limit, "tenant", CurrentTenant.require()), MAPPER);
     }
 
     public List<Alert> findOpenByOrderIds(Collection<String> orderIds) {
         return jdbc.query(
-                "SELECT " + COLS + " FROM alerts WHERE resolved = false AND order_id IN (:ids)",
-                Map.of("ids", orderIds), MAPPER);
+                "SELECT " + COLS + " FROM alerts WHERE tenant_id = :tenant AND resolved = false AND order_id IN (:ids)",
+                Map.of("ids", orderIds, "tenant", CurrentTenant.require()), MAPPER);
     }
 }

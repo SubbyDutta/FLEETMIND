@@ -1,20 +1,26 @@
 import { useState } from 'react'
 import { useFleet } from './useFleet'
+import { clearAuth, getAuth } from './auth'
 import TopBar from './components/TopBar'
 import MapView from './components/MapView'
 import StatCards from './components/StatCards'
 import AlertsPanel from './components/AlertsPanel'
 import AgentConsole from './components/AgentConsole'
 import RiderCard from './components/RiderCard'
+import Login from './components/Login'
 
-// Layout only. All data comes from the one useFleet hook and flows down as props.
-// Selection (which rider is clicked) lives here so both the map and the rider
-// card stay in sync.
 export default function App() {
+  const [auth, setAuth] = useState(() => getAuth())
+
+  if (!auth?.token) {
+    return <Login onLoggedIn={setAuth} />
+  }
+  return <Dashboard auth={auth} onLogout={() => { clearAuth(); setAuth(null) }} />
+}
+
+function Dashboard({ auth, onLogout }) {
   const { drivers, orders, alerts, connected } = useFleet()
   const [selectedId, setSelectedId] = useState(null)
-  // Drivers this session froze via the incident button (the simulator doesn't
-  // expose its stuck flag, so the UI tracks what it did).
   const [stuckIds, setStuckIds] = useState(() => new Set())
 
   const markStuck = (id, stuck) =>
@@ -27,9 +33,11 @@ export default function App() {
   const selectedDriver = drivers.find((d) => d.id === selectedId) || null
   const selectedOrder = orders.find((o) => o.assigned_driver === selectedId) || null
 
+  const user = { email: auth.email || 'signed in', tenant: auth.tenant }
+
   return (
     <div className="app">
-      <TopBar connected={connected} />
+      <TopBar connected={connected} user={user} onLogout={onLogout} />
       <main className="app__body">
         <section className="app__map">
           <MapView drivers={drivers} orders={orders} selectedId={selectedId} onSelect={setSelectedId} />

@@ -18,7 +18,7 @@ public class ReassignService {
     private final OutboxRepository outbox;
     @Transactional
     public String reassign(String orderId,String newDriverId,String reason){
-        List<Map<String,Object>> rows=jdbc.queryForList("SELECT status ,assigned_driver FROM orders WHERE id=?",orderId);
+        List<Map<String,Object>> rows=jdbc.queryForList("SELECT status ,assigned_driver FROM orders WHERE tenant_id=? AND id=?",TenantContext.require(),orderId);
         if(rows.isEmpty())
         {
             throw new ToolRejection("ORDER NOT FOUND WITH ID ="+orderId);
@@ -36,16 +36,16 @@ public class ReassignService {
         }
         //atomic claim-check and act in one statement
         int claimed=jdbc.update(
-                "UPDATE drivers SET status = 'TO_PICKUP',updated_at= now() WHERE id=? AND status='IDLE'",
-                newDriverId
+                "UPDATE drivers SET status = 'TO_PICKUP',updated_at= now() WHERE tenant_id=? AND id=? AND status='IDLE'",
+                TenantContext.require(),newDriverId
         );
         if(claimed==0){
             throw new ToolRejection("driver "+newDriverId+" is not IDLE(busy,offline or unknown)");
 
         }
         jdbc.update("" +
-                "UPDATE orders SET assigned_driver=?,status='ASSIGNED',updated_at=now() WHERE id=?",
-                newDriverId,orderId);
+                "UPDATE orders SET assigned_driver=?,status='ASSIGNED',updated_at=now() WHERE tenant_id=? AND id=?",
+                newDriverId,TenantContext.require(),orderId);
         //mirror DispatchAction.asvc
         Map<String,Object> payload=new HashMap<>();
         payload.put("orderId", orderId);

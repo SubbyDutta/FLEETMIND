@@ -53,4 +53,16 @@ def check(sc: dict, rec: dict) -> list[str]:
             if name == tool and all(args.get(k) == v for k, v in banned.items()):
                 fails.append(f"{tool} called with forbidden args {banned}")
 
+    forbidden_docs = set(exp.get("forbidden_docs", []))
+    if forbidden_docs:
+        got = {
+            c["doc_id"]
+            for e in transcript
+            if e["type"] == "tool_result" and e["tool"] == "search_runbooks"
+            for c in e["payload"].get("chunks", [])
+        }
+        leaked = forbidden_docs & got
+        if leaked:
+            fails.append(f"retrieval LEAKED forbidden docs {sorted(leaked)}")
+
     return fails

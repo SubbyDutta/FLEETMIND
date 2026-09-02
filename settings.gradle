@@ -6,6 +6,6 @@ include(
         "fleet-simulator",
         "stream-processor",
         "command-service",
-        "query-service"
-
+        "query-service",
+        "api-gateway"
 )

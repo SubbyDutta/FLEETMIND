@@ -1,5 +1,6 @@
 package com;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,9 +31,15 @@ class ReassignServiceTest {
 
     @BeforeEach
     void fixtures() {
+        TenantContext.set("acme");
         insertDriver(OLD_DRIVER, "TO_PICKUP");
         insertDriver(NEW_DRIVER, "IDLE");
         insertOrder(ORDER, "ASSIGNED", OLD_DRIVER);
+    }
+
+    @AfterEach
+    void clearTenant() {
+        TenantContext.clear();
     }
 
     @Test
@@ -89,6 +96,24 @@ class ReassignServiceTest {
     void deliveredOrder_rejected() {
         jdbc.update("UPDATE orders SET status = 'DELIVERED' WHERE id = ?", ORDER);
         assertThrows(ToolRejection.class,
+                () -> service.reassign(ORDER, NEW_DRIVER, "x"));
+    }
+
+    @Test
+    void crossTenant_orderIsInvisible_notForbidden() {
+        TenantContext.set("globex");
+        ToolRejection rejection = assertThrows(ToolRejection.class,
+                () -> service.reassign(ORDER, NEW_DRIVER, "x"));
+        assertEquals(true, rejection.getMessage().contains("NOT FOUND"));
+        TenantContext.set("acme");
+        assertEquals(OLD_DRIVER, jdbc.queryForObject(
+                "SELECT assigned_driver FROM orders WHERE id = ?", String.class, ORDER));
+    }
+
+    @Test
+    void noTenantBound_failsClosed() {
+        TenantContext.clear();
+        assertThrows(IllegalStateException.class,
                 () -> service.reassign(ORDER, NEW_DRIVER, "x"));
     }
 

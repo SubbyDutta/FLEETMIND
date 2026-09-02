@@ -67,8 +67,9 @@ def test_breaches_window_is_parameterized_not_interpolated(monkeypatch):
     monkeypatch.setattr(analytics_tools, "_rows", spy)
     out = run_tool("get_sla_breaches", {"window_minutes": 45})
 
-    assert seen["params"] == (45,)
+    assert seen["params"] == ("acme", "acme", 45)
     assert "45" not in seen["sql"]          # value travels as a bind param only
+    assert "acme" not in seen["sql"]        # tenant travels as a bind param too
     assert out["total_breaches"] == 0 and out["by_zone"] == {}
 
 

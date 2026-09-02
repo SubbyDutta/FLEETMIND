@@ -9,6 +9,7 @@ import yaml
 from app.agent.agent_loop import run_agent
 from app.agent.analytics_agent import run_analytics_agent
 from app.config import settings
+from app.tenancy import reset_tenant, set_tenant
 from evals.world import build_world
 
 ROOT = Path(__file__).parent
@@ -17,22 +18,28 @@ def load_scenarios()->list[dict]:
     return yaml.safe_load((ROOT / "scenarios.yaml").read_text(encoding="utf-8"))
 def run_scenario(sc:dict) -> dict:
     world=build_world(sc["agent"],sc.get("world",{}))
-    if sc["agent"]=="dispatch":
-        events=run_agent(sc["question"],tools=world)
-    else:
-        events=run_analytics_agent(sc["question"],tools=world)
+    tenant=sc.get("tenant","acme")
+    token=set_tenant(tenant)
+    try:
+        if sc["agent"]=="dispatch":
+            events=run_agent(sc["question"],tools=world)
+        else:
+            events=run_analytics_agent(sc["question"],tools=world)
 
-    t0=time.monotonic()
-    transcript=[
-        {"type": e.type, "step": e.step, "tool": e.tool_name, "payload": e.payload}
-        for e in events
-    ]
+        t0=time.monotonic()
+        transcript=[
+            {"type": e.type, "step": e.step, "tool": e.tool_name, "payload": e.payload}
+            for e in events
+        ]
+    finally:
+        reset_tenant(token)
     final = next((e for e in transcript if e["type"] == "final"), None)
     return {
         "id": sc["id"],
         "agent": sc["agent"],
         "model": settings.agent_model,
         "question": sc["question"],
+        "tenant": tenant,
         "transcript": transcript,
         "answer": final["payload"]["answer"] if final else None,
         "seconds": round(time.monotonic() - t0, 2),

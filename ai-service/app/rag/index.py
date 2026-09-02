@@ -24,46 +24,58 @@ def index_all(force: bool = False) -> None:
     counter = GeminiTokenCounter()
     indexed = skipped = total_chunks = 0
 
-    for doc in load_runbooks(_RUNBOOKS_DIR):
+    tenant_dirs = sorted(p for p in _RUNBOOKS_DIR.iterdir() if p.is_dir())
+    if not tenant_dirs:
+        raise NotADirectoryError(
+            f"No per-tenant runbook directories under {_RUNBOOKS_DIR} "
+            f"(expected e.g. runbooks/acme/*.md)")
 
-        with pool.connection() as conn:
-            if not force and _doc_unchanged(conn, doc):
-                skipped += 1
-                continue
-            chunks = chunk(doc, counter)
-            vectors = embed_documents([c.content for c in chunks])
-            _reindex_doc(conn, doc, chunks, vectors)
-            indexed += 1
-            total_chunks += len(chunks)
-            logger.info("indexed %s (%d chunks)", doc.doc_id, len(chunks))
+    for tenant_dir in tenant_dirs:
+        tenant = tenant_dir.name
+        for doc in load_runbooks(tenant_dir):
+
+            with pool.connection() as conn:
+                if not force and _doc_unchanged(conn, tenant, doc):
+                    skipped += 1
+                    continue
+                chunks = chunk(doc, counter)
+                vectors = embed_documents([c.content for c in chunks])
+                _reindex_doc(conn, tenant, doc, chunks, vectors)
+                indexed += 1
+                total_chunks += len(chunks)
+                logger.info("indexed %s/%s (%d chunks)", tenant, doc.doc_id, len(chunks))
 
 
     print(f"indexed {indexed} docs ({total_chunks} chunks), skipped {skipped} unchanged")
 
 
-def _doc_unchanged(conn: Connection, doc: Document) -> bool:
+def _doc_unchanged(conn: Connection, tenant: str, doc: Document) -> bool:
 
     row = conn.execute(
-        "SELECT metadata->>'content_hash' FROM knowledge_chunks WHERE doc_id = %s LIMIT 1",
-        (doc.doc_id,),
+        "SELECT metadata->>'content_hash' FROM knowledge_chunks "
+        "WHERE tenant_id = %s AND doc_id = %s LIMIT 1",
+        (tenant, doc.doc_id),
     ).fetchone()
     return row is not None and row[0] == doc.content_hash
 
 
 def _reindex_doc(
     conn: Connection,
+    tenant: str,
     doc: Document,
     chunks: list[Chunk],
     vectors: list[list[float]],
 ) -> None:
 
-    conn.execute("DELETE FROM knowledge_chunks WHERE doc_id = %s", (doc.doc_id,))
+    conn.execute("DELETE FROM knowledge_chunks WHERE tenant_id = %s AND doc_id = %s",
+                 (tenant, doc.doc_id))
 
     conn.cursor().executemany(
-        "INSERT INTO knowledge_chunks (doc_id, chunk_no, content, embedding, metadata) "
-        "VALUES (%s, %s, %s, %s::vector, %s)",
+        "INSERT INTO knowledge_chunks (tenant_id, doc_id, chunk_no, content, embedding, metadata) "
+        "VALUES (%s, %s, %s, %s, %s::vector, %s)",
         [
             (
+                tenant,
                 c.doc_id,
                 c.chunk_no,
                 c.content,

@@ -31,23 +31,25 @@ public class DriverQueryRepository {
 
     public List<Driver> findAll(String status) {
         if (status == null) {
-            return jdbc.query("SELECT " + COLS + " FROM drivers ORDER BY id", Map.of(), MAPPER);
+            return jdbc.query(
+                    "SELECT " + COLS + " FROM drivers WHERE tenant_id = :tenant ORDER BY id",
+                    Map.of("tenant", CurrentTenant.require()), MAPPER);
         }
         return jdbc.query(
-                "SELECT " + COLS + " FROM drivers WHERE status = :status ORDER BY id",
-                Map.of("status", status), MAPPER);
+                "SELECT " + COLS + " FROM drivers WHERE tenant_id = :tenant AND status = :status ORDER BY id",
+                Map.of("status", status, "tenant", CurrentTenant.require()), MAPPER);
     }
 
     public Driver findById(String id) {
         List<Driver> rows = jdbc.query(
-                "SELECT " + COLS + " FROM drivers WHERE id = :id",
-                Map.of("id", id), MAPPER);
+                "SELECT " + COLS + " FROM drivers WHERE tenant_id = :tenant AND id = :id",
+                Map.of("id", id, "tenant", CurrentTenant.require()), MAPPER);
         return rows.isEmpty() ? null : rows.getFirst();
     }
 
     public List<Driver> findByIds(Collection<String> ids) {
         return jdbc.query(
-                "SELECT " + COLS + " FROM drivers WHERE id IN (:ids)",
-                Map.of("ids", ids), MAPPER);
+                "SELECT " + COLS + " FROM drivers WHERE tenant_id = :tenant AND id IN (:ids)",
+                Map.of("ids", ids, "tenant", CurrentTenant.require()), MAPPER);
     }
 }

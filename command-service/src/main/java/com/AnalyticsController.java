@@ -12,7 +12,6 @@ import java.util.concurrent.atomic.AtomicReference;
 
 @RestController
 @RequestMapping("/api/analytics")
-@CrossOrigin(origins = "*")
 public class AnalyticsController {
 
     private final AgentGateway agentGateway;
@@ -32,7 +31,7 @@ public class AnalyticsController {
         List<String> toolsUsed = new ArrayList<>();
         AtomicReference<ChatEvent> terminal = new AtomicReference<>();
         try {
-            agentGateway.analytics(req.question(), ev -> {
+            agentGateway.analytics(req.question(), TenantContext.require(), ev -> {
                 switch (ev.getType()) {
                     case "TOOL_CALL" -> toolsUsed.add(ev.getToolName());
                     case "FINAL", "ERROR" -> terminal.set(ev);

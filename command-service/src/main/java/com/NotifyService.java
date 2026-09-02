@@ -17,7 +17,7 @@ public class NotifyService {
     public String notifyCustomer(String orderId,String message,String reason)
     {
         Integer exists=jdbc.queryForObject(
-                "SELECT count(*) FROM orders WHERE id=?", Integer.class,orderId
+                "SELECT count(*) FROM orders WHERE tenant_id=? AND id=?", Integer.class,TenantContext.require(),orderId
         );
         if(exists==null || exists==0)
         {

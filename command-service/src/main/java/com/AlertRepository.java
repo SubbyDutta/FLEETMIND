@@ -29,16 +29,17 @@ public class AlertRepository {
                 alert.getReason()
         );
     }
-    @Cacheable(cacheNames = "alerts", key = "'recent'")
+    @Cacheable(cacheNames = "alerts", key = "T(com.TenantContext).require() + ':recent'")
     public List<Map<String, Object>> findRecent() {
         return jdbc.queryForList(
                 """
                 SELECT id, type, severity, driver_id, order_id, reason, resolved, created_at
                 FROM alerts
-                WHERE resolved = false
+                WHERE tenant_id = ? AND resolved = false
                 ORDER BY created_at DESC
                 LIMIT 50
-                """
+                """,
+                TenantContext.require()
         );
     }
 }
