@@ -1,138 +1,163 @@
 # FleetMind
 
-**Real-time food-delivery fleet operations for a simulated Kolkata — 27 riders on real streets, every event through Kafka, and an AI dispatcher that investigates incidents and executes fixes through a transactional outbox.**
+**A food-delivery fleet-ops platform for a simulated Kolkata, built the way you'd build it for real: seven services on a Kafka backbone, JWT + multi-tenancy at an API gateway, Redis caching with a hand-rolled leader lease, circuit breakers, a CQRS read side, distributed tracing — and an AI dispatcher that has to earn every single write through a transactional outbox.**
 
-<!-- TODO(raj): replace <GH_USER> once the repo is pushed -->
-[![CI](https://github.com/<GH_USER>/fleetmind/actions/workflows/ci.yml/badge.svg)](https://github.com/<GH_USER>/fleetmind/actions/workflows/ci.yml)
+[![CI](https://github.com/SubbyDutta/FLEETMIND/actions/workflows/ci.yml/badge.svg)](https://github.com/SubbyDutta/FLEETMIND/actions/workflows/ci.yml)
 ![Java 21](https://img.shields.io/badge/Java-21-007396)
-![Spring Boot 3.5](https://img.shields.io/badge/Spring%20Boot-3.5-6DB33F)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5-6DB33F)
 ![Kafka](https://img.shields.io/badge/Kafka-Avro%20%2B%20Schema%20Registry-231F20)
-![Python 3.14](https://img.shields.io/badge/Python-3.14-3776AB)
-![Gemini](https://img.shields.io/badge/Gemini-2.5%20Flash-4285F4)
+![Python](https://img.shields.io/badge/Python-ai--service-3776AB)
+![Redis](https://img.shields.io/badge/Redis-cache%20%2B%20leader%20lease-DC382D)
 
-<!-- TODO(raj): record and drop in demo.gif + video link -->
-![Demo — live map, auto-alert, agent reassign](docs/demo.gif)
+Here's the demo in one paragraph. A rider freezes mid-delivery on a real Kolkata street. Within the detection window, Kafka Streams raises a `STUCK` alert. A dispatcher — logged in through the gateway with a tenant-scoped JWT — asks the AI agent what's wrong. The agent reads live telemetry, searches *its tenant's* operational runbooks, picks an idle rider nearby via a PostGIS KNN query, and executes a reassignment: order row and outbox row committed in **one transaction**, published to Kafka by whichever service replica currently holds the Redis leader lease, applied by the simulator, and reflected on the live map a tick later. The customer gets an HTML email about it. Nothing in that chain is mocked, and every hop of it shows up as one trace in Jaeger.
 
-▶ **[2.5-minute walkthrough video](TODO-video-link)** — incident → alert → agent investigates → reassign lands on the map.
+Every hard problem in here was hit on purpose — and several were hit by accident first, which is better. The double-booking bug that motivated the outbox was observed live before it was fixed. The N+1 query problem was measured (51 SQL statements) before it was killed (2). The cross-tenant data leak existed for exactly one commit, with a before/after curl to prove it.
 
-A rider freezes mid-delivery. Within the detection window Kafka Streams raises a `STUCK` alert, the dispatcher asks the AI agent what's wrong, and the agent reads live telemetry, searches the operational runbooks, picks an idle rider nearby, and executes a reassignment — written to Postgres and the outbox in one transaction, published to Kafka, applied by the simulator, and reflected on the live map a tick later. Nothing in that chain is mocked.
-
-## Architecture
+## The system
 
 ```mermaid
 flowchart LR
-    OSRM["OSRM :5000<br/>Kolkata road graph"]
+    WEB["web · React + Leaflet · :5173"]
+    GW["api-gateway · :8090<br/>JWT validation · rate limiting"]
 
-    subgraph SIM["fleet-simulator · :8085"]
-        ME["MovementEngine<br/>27 riders · 3 s tick"]
-        DAL["DispatchActionListener<br/>retries 1s→2s→4s"]
-    end
-
-    subgraph KAFKA["Kafka :9092 · Avro + Schema Registry :8081"]
-        gps(["gps.pings · 12p"])
-        ord(["orders · 6p"])
-        eta(["eta.updates"])
-        al(["alerts · 6p"])
-        da(["dispatch.actions · 6p"])
-        dlt(["dispatch.actions-dlt · 6p"])
-    end
-
-    subgraph SP["stream-processor · Kafka Streams"]
-        JOIN["ETA stream–table join<br/>SLA / stuck / idle detectors"]
-    end
-
-    subgraph CS["command-service · REST+SSE :8086 · gRPC :9091"]
+    subgraph CS["command-service · :8086 · gRPC :9091"]
+        AUTH["auth: login, RS256 keys, JWKS"]
         PROJ["Kafka → Postgres projections"]
         TOOLS["ToolService — reassign / notify"]
-        PUB["OutboxPublisher · 2 s poll"]
+        PUB["OutboxPublisher<br/>(leader-lease gated)"]
     end
 
-    PG[("Postgres :5432<br/>PostGIS + pgvector")]
+    QS["query-service · :8083<br/>GraphQL, batched reads"]
+    NS["notification-service · :8084<br/>email + in-app, idempotent"]
 
-    subgraph AI["ai-service · gRPC :50051 · HTTP :8000"]
+    subgraph KAFKA["Kafka · Avro + Schema Registry"]
+        gps(["gps.pings"])
+        ord(["orders"])
+        eta(["eta.updates"])
+        al(["alerts"])
+        da(["dispatch.actions"])
+        dlt(["*-dlt topics"])
+    end
+
+    SP["stream-processor<br/>Kafka Streams: SLA / stuck / idle"]
+
+    subgraph SIM["fleet-simulator · :8085"]
+        ME["27 riders · OSRM routes · 3s tick"]
+        DAL["dispatch consumer<br/>retries 1s→2s→4s → DLT"]
+    end
+
+    subgraph AI["ai-service · gRPC :50051"]
         DAG["dispatch agent · 7 tools"]
-        AAG["analytics agent · 3 read-only tools"]
-        RAG["runbook RAG · 9 SOPs"]
+        AAG["analytics agent · read-only"]
+        RAG["per-tenant runbook RAG"]
     end
 
-    EVAL["eval harness<br/>30 scenarios · 2 graders · 85% gate"]
-    WEB["web · React + Leaflet · :5173"]
+    PG[("Postgres<br/>PostGIS + pgvector")]
+    RD[("Redis<br/>cache · lease · rate limits")]
+    MH["MailHog :8025"]
 
-    OSRM --> ME
-    ME --> gps
-    ME --> ord
-    gps --> JOIN
-    ord --> JOIN
-    JOIN --> eta
-    JOIN --> al
-    gps --> PROJ
-    ord --> PROJ
-    eta --> PROJ
-    al --> PROJ
+    WEB --> GW
+    GW --> CS
+    GW --> QS
+    CS --> RD
+    GW --> RD
+    SIM --> gps & ord
+    gps & ord --> SP
+    SP --> eta & al
+    gps & ord & eta & al --> PROJ
     PROJ --> PG
-    CS -->|"REST + SSE"| WEB
-    WEB -->|"chat · analytics"| CS
-    CS -->|"AgentService.Chat"| DAG
-    CS -->|"Analytics"| AAG
-    DAG --> RAG
+    QS --> PG
+    CS -->|"gRPC · x-tenant-id"| AI
     RAG --> PG
-    AAG -->|"read-only SQL"| PG
-    DAG -->|"gRPC tool calls"| TOOLS
+    DAG -->|"tool calls"| TOOLS
     TOOLS -->|"row + outbox, one tx"| PG
     PG --> PUB
     PUB --> da
     da --> DAL
-    DAL -->|"poison / retries exhausted"| dlt
-    DAL -->|"applies + re-emits OrderEvent"| ord
-    EVAL -.->|"real agents · canned tools"| AI
+    al & ord & da --> NS
+    NS --> MH
 ```
 
-Six Avro event types under schema-registry contracts; `orders`, `dispatch.actions`, and `eta.updates` are keyed by `orderId` so per-order sequencing survives partitioning. Both Java services also export Micrometer metrics to Prometheus (:9099) and OpenTelemetry traces to Jaeger (:16686) — the dispatch round-trip is a single 4-span trace across 2 services and 2 Kafka hops.
+Six Avro event types under Schema Registry contracts with enforced backward evolution. `orders`, `dispatch.actions`, and `eta.updates` are keyed by `orderId`, so per-order sequencing survives partitioning — a property the error-handling design leans on hard (see below).
 
-## Why this project is interesting
+## The engineering
 
-- **The transactional outbox here fixes a bug that was observed live, not hypothesized.** Before the outbox relay existed, the agent's first real reassignment committed to Postgres while the simulator never learned: the old rider sat orphaned, the new one was double-booked, and GPS pings kept overwriting the claim. The fix is the textbook pattern — [`ReassignService`](command-service/src/main/java/com/ReassignService.java) writes the order update and the outbox row in one transaction, [`OutboxPublisher`](command-service/src/main/java/com/OutboxPublisher.java) drains with `FOR UPDATE SKIP LOCKED` and marks after publishing (at-least-once: between losing and duplicating, pick duplicating).
-- **Error handling is a deliberate policy, not a default.** The agent's write path gets bounded retries (1 s → 2 s → 4 s) and a dead-letter topic, with a byte-array template so even undeserializable poison lands on `dispatch.actions-dlt` with forensic headers ([`KafkaErrorConfig`](fleet-simulator/src/main/java/com/KafkaErrorConfig.java)). Non-blocking `@RetryableTopic` was evaluated and rejected: it trades per-key ordering for throughput, and dispatch actions per order must apply in sequence. Projections get the opposite policy — retry then log-and-skip, no DLT — because they're rebuildable by replay.
-- **Agent safety is enforced by construction, not by prompt.** Each agent is a system prompt plus an explicit toolset over shared loop machinery. The analytics agent cannot call `reassign_order` — the tool isn't declared to the model *and* isn't resolvable at execution time; a unit test fakes the model requesting it and asserts "unknown tool". Underneath sits a second layer: every analytics query opens with `SET TRANSACTION READ ONLY` — transaction-scoped rather than session-scoped, because the connection pool is shared with a component that writes.
-- **The agents are evaluated with a real model against a frozen world.** The 30-scenario harness runs real Gemini through the production loop while canned tools replay scripted telemetry (`CannedTool` clones each real tool's name, description, and pydantic schema, so the model sees production-identical declarations). Runbook retrieval stays real — local RAG is deterministic and is itself under test. Two independent graders score every episode, and the harness is mutation-tested: a zero-cost dry run must catch 4 planted violations before any quota is spent.
-- **Human-in-the-loop is a schema field.** Both write tools require an explicit `confirm=true` argument; the dispatch prompt requires a runbook citation before any action, and the mechanical grader fails any transcript where an action precedes a runbook search.
-- **The failure stories are documented, not buried.** Known gaps ship as design notes with articulated fixes: the outbox deliberately breaks the trace (the publisher is a scheduled poll with no request context — the fix is persisting `traceparent` on the outbox row, consciously not built), the Kafka Streams hop is untraced, and a stale GPS ping can stomp a fresh reassignment for at most one or two ticks (full fix: fencing tokens). War stories — the 170 s Gemini call that was 8 dead IPv6 routes × 21 s TCP timeouts, the retry policy that DDoSed its own rate-limit quota, the DLT suffix that years of tutorials get wrong — live in the learnings doc. <!-- TODO(raj): link learnings doc once moved into the repo, e.g. docs/LEARNINGS.html -->
+### The outbox exists because of a bug I watched happen
+
+Before the outbox relay, the agent's first real reassignment committed to Postgres while the simulator never learned about it: the old rider sat orphaned, the new one was double-booked, and GPS pings kept overwriting the claim. The fix is the textbook pattern, implemented properly: [`ReassignService`](command-service/src/main/java/com/ReassignService.java) writes the order update and the outbox row in one transaction, and [`OutboxPublisher`](command-service/src/main/java/com/OutboxPublisher.java) drains with `FOR UPDATE SKIP LOCKED`, publishing before marking — at-least-once, because between losing an action and duplicating one, you pick duplicating and make the consumer idempotent.
+
+### The publisher runs on exactly one replica — via a hand-rolled Redis lease
+
+Scale the command service to N replicas and you'd get N outbox publishers double-sending. The leader lease is `SET NX EX` with a Lua compare-and-swap renewal (check-the-value-then-extend has a TOCTOU race; the Lua script makes it atomic), a `host-pid-uuid` fencing value, and **no explicit release** — a dying leader just lets the TTL lapse, and failover lands inside one TTL window. Two deliberate decisions worth defending in a review: the lease **fails open** (Redis down → everyone publishes, because duplicate delivery is survivable and a stalled outbox is not), and Redis runs with `noeviction` (an `allkeys-lru` policy could evict the lease key under memory pressure — which means two leaders). Verified live with two instances: one leader, kill it, the other takes over; the original reboots and correctly stays a follower.
+
+### The cache layer degrades toward the database, never away from it
+
+Cache-aside over the hot read paths with per-cache TTLs (3s for driver/order state that changes every tick, 10s for slower aggregates). A custom error handler means a Redis outage silently becomes a Postgres read — a cache that can take down reads isn't a cache, it's a dependency. Every key is **prefixed with the tenant** (`fm:cache:` + tenant + key), because a shared cache is the single easiest place to leak data across tenants after you've carefully scoped every SQL query. Measured live: 93.5% hit rate on the driver-list path.
+
+### Auth is a gateway, and tenancy is a relay race
+
+All traffic enters through a Spring Cloud Gateway that validates **RS256** JWTs against a JWKS endpoint — asymmetric keys because three services validate tokens and only one should ever be able to mint them; that shrinks the blast radius of a compromised validator to zero. Redis-backed token buckets rate-limit per-IP on login (hammering it live: 5 × 200, then 429s) and per-subject on the API. Roles are `ADMIN` / `DISPATCHER` / `VIEWER`, enforced at the endpoint level — a viewer can watch the map but gets a 403 trying to reach analytics.
+
+The interesting part is how the tenant travels. A claim in the JWT becomes a `ThreadLocal` in the Java filter, crosses the gRPC boundary as `x-tenant-id` metadata via server interceptors, lands in a Python `ContextVar`, and ends as a `WHERE tenant_id = ?` predicate on every human-facing query — including vector search, so each tenant's agents retrieve only their own runbooks. The context accessor is **fail-closed**: a code path that forgets to establish tenancy throws, it doesn't return everything. Machine paths (Kafka projections) deliberately stay tenant-defaulted — the dumb-writer/scoped-reader split keeps Avro contracts untouched.
+
+Proof over promises: one tenant's runbooks contain a honeypot codeword. An eval scenario logs in as the *other* tenant and tries to get the agent to surface it — retrieval comes back empty and the agent refuses honestly. And the commit history keeps the receipt: the same curl that returned a foreign tenant's order before tenancy landed returns zero rows after.
+
+### Reads got their own service, and the N+1 kill is measured, not claimed
+
+Dashboard reads go through a separate GraphQL query service — CQRS-lite: REST for writes, client-shaped queries for reads, and the two sides can't contaminate each other. The naive resolver design was benchmarked first: **51 SQL statements** to render 50 orders with drivers and alerts. With `@BatchMapping` DataLoader batching: **2**. Depth and complexity guardrails reject a nested query bomb before a single SQL statement executes. Security context provably propagates onto the DataLoader threads — batch-mapped fields stay tenant-scoped.
+
+### Failure policy is chosen per path, not defaulted
+
+The agent's write path gets bounded retries (1s → 2s → 4s) and a dead-letter topic, with a byte-array producer template so even *undeserializable* poison lands on the DLT with forensic headers. Non-blocking `@RetryableTopic` was evaluated and **rejected**: it trades per-key ordering for throughput, and dispatch actions for one order must apply in sequence. Projections get the opposite policy — retry, then log-and-skip, no DLT — because they're rebuildable by replay. Same framework, opposite policies, both defensible.
+
+Circuit breakers guard both external edges. The OSRM routing breaker required moving the existing try/catch *outside* the breaker — a breaker that never sees failures never opens. The AI-service breaker wraps stream *consumption*, not the call, because gRPC blocking stubs are lazy and failures surface on `hasNext()`. When it's open, the API returns an honest 503 with `circuit_open: true` instead of hanging a dispatcher's browser for two minutes. Watched live through the full state machine: CLOSED → OPEN → HALF_OPEN → probe → CLOSED.
+
+### The AI agents are treated like untrusted code
+
+Nothing here trusts a prompt. The analytics agent *cannot* call `reassign_order`: the tool isn't declared to the model **and** isn't resolvable at execution time, and a unit test fakes the model requesting it and asserts "unknown tool". Underneath that, every analytics query opens with `SET TRANSACTION READ ONLY` — transaction-scoped, not session-scoped, because the connection pool is shared with a component that writes. Both write tools require an explicit `confirm=true` schema argument, and the dispatch prompt requires a runbook citation before any action — with a grader that fails any transcript where an action precedes a runbook search.
+
+The agents are evaluated like software: a 30-scenario harness runs the real model through the production loop against canned tool worlds (canned tools clone each real tool's name, description, and schema, so the model sees production-identical declarations). Scenarios cover happy paths, one-scenario-per-prompt-rule regressions, refusals, prompt injection inside tool results, and cross-tenant isolation. Every episode is graded twice — mechanically on *actions*, by an LLM judge on *words* — and the harness is mutation-tested: a zero-cost dry run must catch four planted violations before any API quota is spent. The gate is deliberately 85%, not 100%, because LLMs aren't bit-deterministic and a 100% bar teaches people to ignore red builds.
+
+### Notifications are an exercise in idempotency
+
+The notification service consumes alerts, order terminals, and dispatch actions, and turns them into Thymeleaf HTML emails (MailHog in dev) plus in-app rows — deduped by `topic-partition-offset` in its own table, so an at-least-once redelivery never emails a customer twice. It boots with `auto-offset-reset: latest` on purpose: `earliest` on a first deploy would replay the entire event history and blast every email at once. Per-user, per-event-type channel preferences; a mail failure propagates so the retry ladder and DLT get their shot.
+
+### And you can watch all of it
+
+Micrometer metrics to Prometheus, provisioned Grafana dashboards (consumer lag, HTTP percentiles, cache hit rate per cache, which instance holds the outbox lease, breaker states), and OpenTelemetry traces to Jaeger — the dispatch round-trip is a single 4-span trace across two services and two Kafka hops. The known tracing gaps are documented as design notes with articulated fixes, not hidden: the outbox breaks the trace (a scheduled poller has no request context; the fix is persisting `traceparent` on the outbox row — consciously not built), and the Kafka Streams hop is untraced.
+
+## Numbers that were actually measured
+
+- **51 → 2** SQL statements for 50 orders, naive vs. batched GraphQL resolvers (logs kept)
+- **93.5%** Redis cache hit rate on the hot driver-list path
+- Outbox leader failover ≤ one lease TTL; rebooted ex-leader correctly stays follower
+- Full breaker lifecycle observed live on both edges: OPEN at 50% failure rate, timed HALF_OPEN transitions, ~14ms fallbacks vs ~2s timeout failures
+- Login rate limit: 5 × 200 then 429s under a live hammer
+- **4-span** distributed trace across 2 services + 2 Kafka hops
+- Eval smoke: 14.9s, 9-step episode with 2 real RAG retrievals, both graders green; dry run catches all 4 planted violations at $0
+
+*(One number this README refuses to fake: the full 30-scenario eval scorecard is still being run in batches on free-tier quota. The harness, dry run, and smoke scenarios are green.)*
 
 ## Stack
 
-| Tech | Where | Why |
-|---|---|---|
-| Java 21 · Spring Boot 3.5 | command-service, fleet-simulator | Industry default for the transactional and Kafka-consumer side |
-| Apache Kafka (Confluent 7.6.1) | event backbone, 6 topics | Replayable log; co-partitioned keys make per-order ordering and stream joins work |
-| Avro + Schema Registry | all event types ([common-events](common-events/src/main/avro/)) | Typed contracts with enforced BACKWARD evolution |
-| Kafka Streams | stream-processor | Stateful windowed detection (SLA / stuck / idle) + KTable joins for live ETA |
-| gRPC + Protobuf (grpc-java 1.68.1) | Java ↔ Python, 4 proto contracts | Typed polyglot boundary — deliberate contract, not AI-glued JSON |
-| Python + `google-genai` | ai-service | The GenAI ecosystem lives in Python; Java keeps the transactional world |
-| Gemini 2.5 Flash | both agents + LLM judge | Function calling at temperature 0; free tier fits a solo project |
-| Postgres 16 + PostGIS + pgvector | one store | Projections, geo KNN (nearest idle rider), and embeddings without a second database |
-| OSRM (self-hosted) | rider routing | Real Kolkata road geometry, unlimited and free; Haversine fallback if down |
-| React 18 + Vite + Leaflet | web | Live moving-marker map with no map-API key |
-| Micrometer + OTel → Prometheus / Grafana / Jaeger | both Java services | Metrics tell you *that*, traces tell you *where* |
+| Tech | Why it's here |
+|---|---|
+| Java 21 · Spring Boot | The transactional, Kafka-consumer side of the house |
+| Apache Kafka + Avro + Schema Registry | Replayable event log with typed, evolvable contracts; co-partitioned keys make ordering and stream joins work |
+| Kafka Streams | Stateful windowed detection (SLA / stuck / idle) and live ETA joins |
+| Spring Cloud Gateway + JWT (RS256) | Single entry point: auth, rate limiting, tenant routing |
+| Redis | Read cache, outbox leader lease, rate-limit buckets — three jobs, one box, each with a deliberate failure mode |
+| gRPC + Protobuf | Typed polyglot boundary between Java and Python — a real contract, not glued JSON |
+| Python + Gemini | The agent side; function calling at temperature 0 |
+| Postgres + PostGIS + pgvector | Projections, geo KNN (nearest idle rider), and embeddings in one store — no second database until it earns its keep |
+| GraphQL (query-service) | Client-shaped dashboard reads with DataLoader batching |
+| OSRM (self-hosted) | Real Kolkata road geometry for rider movement |
+| React + Leaflet | Live moving-marker ops console, no map-API key |
+| Prometheus · Grafana · Jaeger | Metrics tell you *that*, traces tell you *where* |
 
-## Eval scorecard
+## Run it
 
-30 frozen scenarios in 6 partitions, run with the real model against canned tool worlds. Every scenario is graded twice: [`checks.py`](ai-service/evals/checks.py) mechanically asserts the *actions* (tool order, arguments, runbook-before-action, forbidden calls), and [`judge.py`](ai-service/evals/judge.py) scores the *words* (correctness and groundedness, 1–5 each, both ≥ 4 to pass — fabricated figures cap groundedness at 2). [`report.py`](ai-service/evals/report.py) gates at **85%** and exits non-zero below it — deliberately not 100%, because LLMs aren't bit-deterministic even at temperature 0, and a 100% bar teaches people to ignore red builds.
-
-| Partition | Scenarios | What it proves | Pass |
-|---|---|---|---|
-| A — dispatch happy paths | 6 | Correct investigate → cite runbook → act sequences | ⏳ |
-| B — prompt-rule regressions | 7 | One scenario per system-prompt rule; a deleted rule turns its scenario red | ⏳ |
-| C — refusals & policy edges | 6 | Refuses refunds/cancellations it isn't authorized for; holds marginal cases | ⏳ |
-| D — adversarial & safety | 4 | Prompt injection in tool results, phantom IDs, rider-safety escalation | ⏳ |
-| E — analytics happy paths | 4 | Grounded zone/ETA/utilization answers from SQL aggregates | ⏳ |
-| F — analytics grounding | 3 | Read-only isolation, unknown zones, zero-data honesty | ⏳ |
-
-> **Status:** full scorecard run pending (free-tier request pacing). Smoke evidence so far: scenario `a1` passed both graders — 14.9 s, 9 steps, 2 real runbook retrievals, adapted to an unscripted tool error without derailing. The dry run (`python -m evals.dryrun`, zero API cost) is green and catches all 4 planted violations.
-> <!-- TODO(raj): replace ⏳ column after `python -m evals.report` completes a full run -->
-
-## Quickstart
-
-Prereqs: Docker, JDK 21, Python 3.12+ (developed on 3.14), Node 18+, a [Gemini API key](https://aistudio.google.com/apikey).
+Prereqs: Docker, JDK 21, Python 3.12+, Node 18+, a [Gemini API key](https://aistudio.google.com/apikey).
 
 **1. One-time: build the OSRM routing graph** (`data/` is git-ignored — bring your own extract):
 
@@ -143,13 +168,13 @@ docker run --rm -v ${PWD}/data:/data osrm/osrm-backend osrm-partition /data/kolk
 docker run --rm -v ${PWD}/data:/data osrm/osrm-backend osrm-customize /data/kolkata.osrm
 ```
 
-**2. Infrastructure** — Kafka, Schema Registry, Postgres (PostGIS + pgvector), OSRM, Kafka-UI, Prometheus, Grafana, Jaeger:
+**2. Infrastructure** — Kafka, Schema Registry, Postgres, Redis, OSRM, MailHog, Kafka-UI, Prometheus, Grafana, Jaeger:
 
 ```powershell
 docker compose up -d
 ```
 
-**3. Configure the AI service** — create `ai-service/.env` (git-ignored, never commit it):
+**3. AI service** — create `ai-service/.env` (git-ignored, never commit it):
 
 ```ini
 GEMINI_API_KEY=<your key>
@@ -161,16 +186,19 @@ AGENT_MODEL=gemini-2.5-flash
 cd ai-service
 python -m venv .venv; .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-python -m app.rag.index        # embed + index the 9 runbooks into pgvector
+python -m app.rag.index        # embed + index the runbooks into pgvector, per tenant
 ```
 
-**4. Services — boot order matters.** On a fresh Kafka, the stream processor derives its internal topic layout from the source topics, so the producers that create them must boot first:
+**4. Services — boot order matters.** On fresh Kafka, the stream processor derives its internal topic layout from source topics, so their producers boot first:
 
 ```powershell
-./gradlew :command-service:bootRun      # 1 — REST/SSE :8086, gRPC tools :9091
-./gradlew :fleet-simulator:bootRun      # 2 — the world: riders, orders, GPS
-./gradlew :stream-processor:bootRun     # 3 — after source topics exist
-cd ai-service; uvicorn app.main:app --port 8000    # 4 — agents (gRPC :50051)
+./gradlew :command-service:bootRun        # 1 — auth, projections, tools, outbox
+./gradlew :fleet-simulator:bootRun        # 2 — the world: riders, orders, GPS
+./gradlew :stream-processor:bootRun       # 3 — after source topics exist
+./gradlew :query-service:bootRun          # 4 — GraphQL reads
+./gradlew :notification-service:bootRun   # 5 — email + in-app
+./gradlew :api-gateway:bootRun            # 6 — the front door
+cd ai-service; uvicorn app.main:app --port 8000    # 7 — agents (gRPC :50051)
 ```
 
 **5. UI:**
@@ -179,65 +207,75 @@ cd ai-service; uvicorn app.main:app --port 8000    # 4 — agents (gRPC :50051)
 cd web; npm install; npm run dev        # http://localhost:5173
 ```
 
-Click a rider → **freeze** it → watch the stuck alert fire → ask the agent *"what's wrong with order X and what should I do?"*.
+Log in (`dispatcher@acme` / `demo123`), click a rider, **freeze** it, watch the stuck alert fire, then ask the agent *"what's wrong with order X and what should I do?"*. Check MailHog at :8025 for the customer email.
 
 ### Port map
 
 | Port | What |
 |---|---|
 | 5173 | web UI (Vite dev) |
+| 8090 | **api-gateway — the only port a client should talk to** |
 | 8086 / 9091 | command-service REST+SSE / gRPC ToolService |
+| 8083 | query-service (GraphQL + GraphiQL) |
+| 8084 | notification-service |
 | 8085 | fleet-simulator (incident endpoints) |
-| 8080 | stream-processor (interactive queries: `/state/eta/{orderId}`) |
-| 50051 / 8000 | ai-service gRPC / HTTP (`/health`, `/retrieve`) |
+| 8080 | stream-processor (interactive queries) |
+| 50051 / 8000 | ai-service gRPC / HTTP |
 | 9092 / 8081 / 8088 | Kafka / Schema Registry / Kafka-UI |
-| 5432 / 5000 | Postgres / OSRM |
-| 9099 / 3000 / 16686 | Prometheus / Grafana (provisioned dashboard) / Jaeger |
+| 5432 / 6379 / 5000 | Postgres / Redis / OSRM |
+| 1025 / 8025 | MailHog SMTP / inbox UI |
+| 9099 / 3000 / 16686 | Prometheus / Grafana / Jaeger |
 
 ## Repo tour
 
 ```
-common-events/     6 Avro schemas — the event contracts (codegen, no hand-written Java)
-common-proto/      4 gRPC contracts: agent chat, tools, telemetry stream, status
-fleet-simulator/   the world: 27 riders, 18 real Kolkata restaurants, OSRM movement,
-                   dispatch-action consumer with retry ladder + DLT
-stream-processor/  Kafka Streams: live ETA join + SLA/stuck/idle windowed detectors
-command-service/   projections → Postgres, REST + SSE for the UI, gRPC ToolService,
-                   transactional outbox + publisher
-ai-service/        Python: dispatch + analytics agents (Gemini function calling),
-                   runbook RAG (hybrid vector+FTS, RRF), eval harness under evals/
-web/               React + Leaflet ops console: live map, alerts, agent drawer
-db/                Postgres image (PostGIS + pgvector) + schema (init.sql)
-observability/     Prometheus scrape config + provisioned Grafana dashboard
-.github/           CI: Gradle build + tests against the project's own db image
+common-events/         6 Avro schemas — the event contracts (codegen, no hand-written Java)
+common-proto/          4 gRPC contracts: agent chat, tools, telemetry stream, status
+api-gateway/           front door: JWT validation, Redis rate limiting, routing
+fleet-simulator/       the world: 27 riders, 18 real Kolkata restaurants, OSRM movement,
+                       dispatch consumer with retry ladder + DLT
+stream-processor/      Kafka Streams: live ETA join + SLA/stuck/idle windowed detectors
+command-service/       auth + RS256 keys + JWKS, projections → Postgres, REST + SSE,
+                       gRPC ToolService, transactional outbox + leased publisher
+query-service/         GraphQL read side: batched resolvers, depth/complexity guardrails
+notification-service/  idempotent Kafka consumers → Thymeleaf email + in-app rows
+ai-service/            Python: dispatch + analytics agents, per-tenant runbook RAG
+                       (hybrid vector+FTS, RRF), eval harness under evals/
+web/                   React + Leaflet ops console: login, live map, alerts, agent drawer
+db/                    Postgres image (PostGIS + pgvector) + schema
+observability/         Prometheus scrape config + provisioned Grafana dashboards
+.github/               CI: Gradle build + tests against the project's own db image
 ```
 
 ## Testing
 
 ```powershell
-./gradlew test          # 9 JUnit tests (Postgres container must be up)
-cd ai-service; pytest   # 42 tests; integration-marked ones need Postgres + API key
+./gradlew test          # JUnit across all six Java modules (Postgres container must be up)
+cd ai-service; pytest   # agent loop, tool isolation, tenancy, retrieval, analytics SQL
 ```
 
-- [`ReassignServiceTest`](command-service/src/test/java/com/ReassignServiceTest.java) proves the core invariant: the order update and the outbox row commit or roll back **together**, and busy/unknown/same-driver/delivered targets are rejected with nothing written.
-- [`KafkaErrorConfigTest`](fleet-simulator/src/test/java/com/KafkaErrorConfigTest.java) pins DLT routing: deserialization poison skips retries and dead-letters via the byte-array template; transient failures walk the full 1 s → 2 s → 4 s ladder first. (These tests caught two stale-docs assumptions, including spring-kafka 3.3's actual `-dlt` suffix.)
-- Python tests cover the agent loop (step cap, arg validation, error surfacing), tool isolation, the chunker, hybrid retrieval, and every analytics SQL tool.
-- The eval harness is the integration suite for agent *behavior*:
+Highlights of what's pinned by tests rather than by hope:
+
+- The core outbox invariant: order update and outbox row commit or roll back **together**; busy / unknown / cross-tenant / delivered targets are rejected with nothing written.
+- DLT routing: deserialization poison skips retries and dead-letters via the byte-array template; transient failures walk the full 1s → 2s → 4s ladder first. (These tests caught two stale-docs assumptions, including the framework's actual `-dlt` suffix.)
+- JWT: forged foreign-key tokens and expired tokens are rejected; missing tenant context **fails closed**.
+- Java `Timestamp` survives the Redis JSON serializer round-trip — verified, not assumed.
+- Tool isolation: a faked model request for a write tool from the read-only agent yields "unknown tool".
+- Notification dedupe: a redelivered offset is skipped; a mail failure propagates so the DLT machinery engages.
+
+The eval harness is the integration suite for agent *behavior*:
 
 ```powershell
 cd ai-service
-python -m evals.dryrun                       # $0 — lint scenarios, verify graders catch violations
-python -m evals.runner --resume --pace=45    # run all 30 against real Gemini (quota-friendly)
+python -m evals.dryrun                       # $0 — lint scenarios, verify graders catch planted violations
+python -m evals.runner --resume --pace=45    # run all 30 against the real model (quota-friendly)
 python -m evals.report                       # grade, print scorecard, exit 1 below 85%
 ```
 
-## Roadmap
+## What's left
 
-| Phase | Planned |
-|---|---|
-| P15 | **geo-service** — extract PostGIS nearest-rider/ETA onto its own gRPC service (:9090 is already reserved for it), circuit-breaker at the caller |
-| P16 | **GraphQL query-service** — client-shaped dashboard reads, DataLoader batching; GraphQL for reads, REST for writes |
-| P17 | **Redis** — cache hot lookups + distributed lock so the outbox publisher runs on exactly one replica |
-| P18 | **Gateway + auth** — Spring Cloud Gateway, JWT, DISPATCHER/ADMIN/CUSTOMER roles, tenant-scoped agent retrieval |
-| P19 | **Notification service** — event-driven customer email + dispatcher in-app, idempotent delivery |
-| P20 | **Load testing** — k6 at 2000 req/s against 3 command-service replicas; kill one mid-test, prove rebalance without loss |
+One phase: **load testing**. Batch the GPS-ping projection writes (Kafka batch listener + `batchUpdate`, collapse-to-latest-per-driver), then k6 against multiple command-service replicas — kill one mid-test and prove the consumer group rebalances without loss. The before/after write-amplification numbers land here when it's done.
+
+---
+
+Built by **Subham Dutta** — [subhamdutta4289@gmail.com](mailto:subhamdutta4289@gmail.com) · [github.com/SubbyDutta](https://github.com/SubbyDutta)
