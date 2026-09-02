@@ -31,6 +31,11 @@ services:
     ports: [ "6379:6379" ]
 
     command: redis-server --save '' --appendonly no --maxmemory 128mb
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    ports:
+      - "1025:1025"   # SMTP (notification-service sends here)
+      - "8025:8025"   # web inbox UI
   osrm:
     image: osrm/osrm-backend
     command: osrm-routed --algorithm mld /data/kolkata.osrm

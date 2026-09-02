@@ -7,5 +7,6 @@ include(
         "stream-processor",
         "command-service",
         "query-service",
-        "api-gateway"
+        "api-gateway",
+        "notification-service"
 )
