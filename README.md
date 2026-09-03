@@ -15,6 +15,8 @@ The part I care about most: **the AI never touches the database directly.** A re
 <!-- ═══ GIF-1 · HERO DEMO ═══ save the file as docs/demo-dispatch.gif, then uncomment the line below -->
 <!-- ![Freeze a rider → STUCK alert → agent investigates → reassignment lands on the map](docs/demo-dispatch.gif) -->
 
+
+
 ## What happens in a dispatch
 
 ```
