@@ -56,7 +56,7 @@ def test_search_runbooks_finds_stuck_protocol():
 @pytest.mark.integration
 def test_find_nearby_driver_sorted_idle_and_limited():
     with pool.connection() as conn:
-        order_id = conn.execute("SELECT id FROM orders LIMIT 1").fetchone()[0]
+        order_id = conn.execute("SELECT id FROM orders WHERE tenant_id = 'acme' LIMIT 1").fetchone()[0]
 
     out = run_tool("find_nearby_driver", {"order_id": order_id, "limit": 3})
     assert "error" not in out

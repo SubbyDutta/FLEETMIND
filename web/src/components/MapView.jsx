@@ -40,8 +40,8 @@ export default function MapView({ drivers, orders, selectedId, onSelect }) {
     }).setView(MAP_CENTER, MAP_ZOOM)
     map.setMaxBounds(bounds)
     L.control.zoom({ position: 'bottomright' }).addTo(map)
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap &copy; CARTO',
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
       minZoom: MIN_ZOOM,
       maxZoom: MAX_ZOOM,
       bounds,
@@ -67,12 +67,17 @@ export default function MapView({ drivers, orders, selectedId, onSelect }) {
           L.DomEvent.stopPropagation(e) // don't let it bubble to the deselect handler
           onSelect(d.id)
         })
+        // content resolved on open so it always shows the latest ping's data
+        marker.bindTooltip(() => driverTooltip(marker._d), {
+          direction: 'top', offset: [0, -12], className: 'driver-tip',
+        })
         driverMarkers.current.set(d.id, marker)
       } else {
         marker.setLatLng([d.lat, d.lng])
         if (marker._status !== d.status) marker.setIcon(riderIcon(color))
       }
       marker._status = d.status
+      marker._d = d
 
       if (d.id === selectedId && routePts.current.length > 1) {
         const trimmed = trimRoute(routePts.current, d.lat, d.lng)
@@ -124,9 +129,43 @@ export default function MapView({ drivers, orders, selectedId, onSelect }) {
 
   const routeActive = selectedStatus === 'TO_PICKUP' || selectedStatus === 'TO_DROP'
 
+  const [query, setQuery] = useState('')
+  const [miss, setMiss] = useState(false)
+  const findDriver = (e) => {
+    e.preventDefault()
+    const q = query.trim().toLowerCase()
+    if (!q) return
+    const hit =
+      drivers.find((d) => d.id.toLowerCase() === q || (d.name || '').toLowerCase() === q) ||
+      drivers.find((d) => d.id.toLowerCase().includes(q) || (d.name || '').toLowerCase().includes(q))
+    if (hit) {
+      onSelect(hit.id) // the selection effect flies the map to the marker
+      setQuery('')
+      setMiss(false)
+    } else {
+      setMiss(true)
+    }
+  }
+
   return (
     <div className="map">
       <div ref={elRef} className="map__canvas" />
+      <form className={`map-search${miss ? ' map-search--miss' : ''}`} onSubmit={findDriver}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+          <circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" />
+        </svg>
+        <input
+          list="driver-ids"
+          value={query}
+          placeholder="Find driver…"
+          onChange={(e) => { setQuery(e.target.value); setMiss(false) }}
+        />
+        <datalist id="driver-ids">
+          {drivers.map((d) => (
+            <option key={d.id} value={d.id}>{d.name || ''}</option>
+          ))}
+        </datalist>
+      </form>
       {routeActive && (
         <button className="route-refresh" onClick={() => setRefreshTick((t) => t + 1)} title="Recompute route">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -161,6 +200,12 @@ function highlightSelected(markers, selectedId) {
     const dot = el.querySelector('.mk')
     if (dot) dot.classList.toggle('mk--selected', id === selectedId)
   }
+}
+
+const driverTooltip = (d) => {
+  if (!d) return ''
+  const name = d.name && d.name !== d.id ? ` · ${d.name}` : ''
+  return `<b>${d.id}</b>${name}<br/><span class="driver-tip__status">${d.status || ''}</span>`
 }
 
 const orderPopup = (o) => {

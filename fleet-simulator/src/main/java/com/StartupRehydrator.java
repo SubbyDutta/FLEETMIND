@@ -109,8 +109,10 @@ public class StartupRehydrator {
 private String obtainServiceToken(RestClient http)
 {
     ParameterizedTypeReference<Map<String,Object>> mapType=new ParameterizedTypeReference<Map<String, Object>>() {};
+    // retry forever: nothing can be simulated until command-service is up, so giving up
+    // here would leave the simulator silent for its whole lifetime (readiness never set)
     int attempt=0;
-    while(attempt<20){
+    while(true){
         attempt++;
         try{
             Map<String,Object> resp=http.post().uri("/api/auth/login")
@@ -123,7 +125,7 @@ private String obtainServiceToken(RestClient http)
             }
         }catch(Exception e)
         {
-            log.warn("Command-service login not ready cus");
+            log.warn("Command-service login not ready (attempt {}): {}",attempt,e.getMessage());
         }
         try{
             Thread.sleep(2000);
@@ -133,14 +135,13 @@ private String obtainServiceToken(RestClient http)
             return null;
         }
     }
-    return null;
 }
 
 private List<Map<String,Object>> fetchList(RestClient http,String token,String uri)
 {
     ParameterizedTypeReference<List<Map<String,Object>>> listType=new ParameterizedTypeReference<List<Map<String, Object>>>() {};
     int attempt =0;
-    while(attempt<20){
+    while(true){
         attempt++;
                 try{
                     return http.get().uri(uri)
@@ -148,18 +149,16 @@ private List<Map<String,Object>> fetchList(RestClient http,String token,String u
                             .retrieve().body(listType);
                 }catch(Exception e)
                 {
-                    log.warn("Command-service not ready cus");
+                    log.warn("{} not ready (attempt {}): {}",uri,attempt,e.getMessage());
                     try{
                         Thread.sleep(2000);
                     }catch(InterruptedException ef)
                     {
                         Thread.currentThread().interrupt();
+                        return null;
                     }
                 }
     }
-
-
-    return null;
 }
     private String stringOf(Object value) {
         return (value == null) ? "" : value.toString();

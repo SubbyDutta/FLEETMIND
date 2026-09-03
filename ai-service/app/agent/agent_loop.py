@@ -36,7 +36,7 @@ def run_agent(
         tools: Toolset|None=None,
 )->Iterator[AgentEvent]:
     contents=[types.Content(role="user",parts=[types.Part(text=question)])]
-    for step in range(1,settings.agent_max_steps+1):
+    for step in range(1,settings.agent_max_steps+5):
         try:
             resp=generate(contents,system_prompt,tools)
         except Exception as e:
@@ -46,8 +46,15 @@ def run_agent(
         if not calls:
             if resp.text:
                 yield AgentEvent("final", step, payload={"answer": resp.text})
-            else:
-                yield AgentEvent("error", step, payload={"error": "no answer"})
+                return
+
+            if step < settings.agent_max_steps:
+                continue
+            finish = "NO_CANDIDATES"
+            if resp.candidates and resp.candidates[0].finish_reason:
+                finish = resp.candidates[0].finish_reason.name
+            yield AgentEvent("error", step,
+                             payload={"error": f"no answer (finish_reason={finish})"})
             return
         contents.append(resp.candidates[0].content)
         response_parts=[]

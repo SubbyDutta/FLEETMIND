@@ -195,6 +195,43 @@ body {
 .route-refresh:hover { background: var(--surface-3); box-shadow: var(--shadow); }
 .route-refresh:active svg { transform: rotate(-180deg); transition: transform 0.4s ease; }
 
+.map-search {
+  position: absolute;
+  top: 14px; left: 14px;
+  z-index: 600;
+  display: flex; align-items: center; gap: 7px;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: var(--blur);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.map-search:focus-within { box-shadow: var(--shadow); }
+.map-search svg { width: 15px; height: 15px; color: var(--accent); flex: none; }
+.map-search input {
+  width: 130px;
+  border: none; outline: none; background: transparent;
+  font-family: inherit; font-size: 13px; font-weight: 600;
+  color: var(--text);
+}
+.map-search input::placeholder { color: var(--faint); font-weight: 500; }
+.map-search--miss { border-color: #ef4444; }
+.map-search--miss svg { color: #ef4444; }
+
+.driver-tip {
+  font-family: inherit; font-size: 12px; font-weight: 600;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow-sm);
+  padding: 5px 9px;
+}
+.driver-tip__status { font-weight: 500; color: var(--muted); font-size: 11px; }
+.driver-tip.leaflet-tooltip-top::before { border-top-color: rgba(255, 255, 255, 0.95); }
+
 .mk-wrap { transition: transform 1s linear; }
 .mk {
   display: flex; align-items: center; justify-content: center;

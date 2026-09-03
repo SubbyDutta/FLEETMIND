@@ -50,7 +50,7 @@ try:
     _chan.close()
     with pool.connection() as conn:
         _row = conn.execute(
-            "SELECT id FROM orders WHERE status <> 'DELIVERED' LIMIT 1").fetchone()
+            "SELECT id FROM orders WHERE status <> 'DELIVERED' AND tenant_id = 'acme' LIMIT 1").fetchone()
     _ORDER_ID = _row[0] if _row else None
     _READY = _ORDER_ID is not None
 except Exception:

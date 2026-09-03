@@ -180,6 +180,8 @@ The agent's write path gets bounded retries (1s → 2s → 4s) and a dead-letter
 Spring's `@RetryableTopic` retries on separate topics, which trades per-key ordering for throughput. Dispatch actions for one order must apply in sequence — a REASSIGN retried after a later CANCEL is a corrupted order. Blocking retries keep the partition's ordering guarantee; the DLT catches what outlives the ladder.
 </details>
 
+The same lesson bit back on the LLM edge. The Gemini client's exponential backoff (capped at 8s, ~21s total budget) looked sensible until agent episodes started dying at their *final* step: a per-minute quota bucket refills on the server's schedule, and Google's 429 says exactly when (`retryDelay: 27s`) — so every blind retry was guaranteed to land inside the dead window, and the episode's retry budget expired seconds before the bucket refilled. The fix: parse the server's suggested delay out of the 429 and sleep exactly that (plus a 2s margin), keeping exponential only for 5xx errors that carry no hint. A retry policy is only correct relative to how the thing you're retrying against actually recovers.
+
 Circuit breakers guard both external edges. The interesting one wraps the AI-service stream's *consumption*, not the call — gRPC blocking stubs are lazy, so failures surface on `hasNext()`. When it's open, the API returns an honest 503 with `circuit_open: true` in ~14ms instead of hanging a dispatcher's browser for two minutes. Watched live through the whole state machine: CLOSED → OPEN → timed HALF_OPEN → probes → CLOSED.
 
 ### Notifications, or: at-least-once means you'll send it twice
@@ -243,7 +245,7 @@ The Java/Python split is deliberate. Python owns the agents and read tools becau
 - **Retries aren't automatically safe.** For dispatch events, ordering mattered more than throughput — which meant rejecting the framework's shinier retry mechanism.
 - **A circuit breaker can be perfectly configured and useless.** My first version caught the exception before the breaker ever saw it.
 - **"The model refuses" is not a security boundary.** Tool restrictions have to exist in the registry and the database session, where the model can't talk its way past them.
-- **Free-tier LLM quotas fail in the worst way**: a retry policy that looked sensible sustained its own outage by keeping the rate-limit bucket full. Uniform ~17s failures across the board turned out to be my retry budget expiring, not the model.
+- **Free-tier LLM quotas fail in the worst way**: a retry policy that looked sensible sustained its own outage by keeping the rate-limit bucket full. Uniform ~17s failures across the board turned out to be my retry budget expiring, not the model. Fixed for good by honoring the 429's own `retryDelay` instead of guessing with exponential backoff.
 
 ## The decisions I'd defend
 

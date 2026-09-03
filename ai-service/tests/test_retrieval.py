@@ -43,7 +43,7 @@ CASES = [
 
 @pytest.mark.parametrize("query,expected_doc,top_n", CASES)
 def test_search_ranks_expected_doc(query, expected_doc, top_n):
-    results = search(query)
+    results = search(query, "acme")
     assert results, f"no results for {query!r}"
     top_docs = [r.doc_id for r in results[:top_n]]
     assert expected_doc in top_docs, (
@@ -52,9 +52,9 @@ def test_search_ranks_expected_doc(query, expected_doc, top_n):
 
 
 def test_empty_query_returns_empty():
-    assert search("   ") == []
+    assert search("   ", "acme") == []
 
 
 def test_invalid_k_raises():
     with pytest.raises(ValueError):
-        search("driver stuck", k=0)
+        search("driver stuck", "acme", k=0)

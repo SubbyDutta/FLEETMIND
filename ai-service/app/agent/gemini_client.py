@@ -1,3 +1,4 @@
+import re
 from functools import lru_cache
 
 import httpx
@@ -37,10 +38,19 @@ def tool_declarations(tools: "base.Toolset|None"=None)->types.Tool:
 def _is_retryable(e: BaseException)->bool:
     return isinstance(e,errors.APIError) and (e.code == 429 or e.code>=500)
 
+_exp_wait = wait_exponential(min=1, max=8)
+
+def _server_suggested_wait(retry_state) -> float:
+    e = retry_state.outcome.exception()
+    m = re.search(r'retryDelay["\']?\s*:\s*["\']?(\d+(?:\.\d+)?)s', str(e))
+    if m:
+        return float(m.group(1)) + 2.0
+    return _exp_wait(retry_state)
+
 @retry(
     retry=retry_if_exception(_is_retryable),
-    wait=wait_exponential(min=1,max=8),
-    stop=stop_after_attempt(5),
+    wait=_server_suggested_wait,
+    stop=stop_after_attempt(6),
     reraise=True,
 )
 def generate(contents: list[types.Content],
