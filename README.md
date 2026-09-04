@@ -14,6 +14,8 @@ The part I care about most: **the AI never touches the database directly.** A re
 
 ![Freeze a rider → STUCK alert → agent investigates → reassignment lands on the map](docs/demo-dispatch.gif)
 
+▶ **[Watch the full 2:30 demo on YouTube](https://youtu.be/NevFzw8Qqi0)** — the whole dispatch flow end to end, including the Kafka topics, the outbox, and the distributed trace in Jaeger.
+
 
 
 ## What happens in a dispatch
