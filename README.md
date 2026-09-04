@@ -12,8 +12,7 @@ The part I care about most: **the AI never touches the database directly.** A re
 ![Redis](https://img.shields.io/badge/Redis-cache%20%2B%20leader%20lease-DC382D)
 ![Python](https://img.shields.io/badge/Python-agents%20%2B%20RAG-3776AB)
 
-<!-- ═══ GIF-1 · HERO DEMO ═══ save the file as docs/demo-dispatch.gif, then uncomment the line below -->
-<!-- ![Freeze a rider → STUCK alert → agent investigates → reassignment lands on the map](docs/demo-dispatch.gif) -->
+![Freeze a rider → STUCK alert → agent investigates → reassignment lands on the map](docs/demo-dispatch.gif)
 
 
 
