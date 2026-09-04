@@ -195,9 +195,13 @@ Micrometer metrics into Prometheus, provisioned Grafana dashboards (consumer lag
 
 <!-- ═══ IMG-2 · JAEGER TRACE ═══ save as docs/trace-dispatch.png, then uncomment -->
 <!-- ![The dispatch round-trip as one 4-span trace in Jaeger](docs/trace-dispatch.png) -->
+<img width="1600" height="741" alt="image" src="https://github.com/user-attachments/assets/c160b64f-02c1-421a-826d-ef9e41dba292" />
+
 
 <!-- ═══ IMG-3 · GRAFANA DASHBOARD ═══ save as docs/grafana-overview.png, then uncomment -->
 <!-- ![Grafana: cache hit rate, outbox leader per instance, consumer lag, breaker states](docs/grafana-overview.png) -->
+<img width="1600" height="715" alt="image" src="https://github.com/user-attachments/assets/aee397b0-9c62-4261-b3e8-e496477b7464" />
+
 
 The gaps are documented instead of hidden: the outbox breaks the trace (a scheduled poller has no request context — the fix is persisting `traceparent` on the outbox row, consciously not built), and the Kafka Streams hop is untraced.
 
