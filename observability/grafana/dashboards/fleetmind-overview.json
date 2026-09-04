@@ -1,20 +1,41 @@
 {
   "uid": "fleetmind-overview",
   "title": "FleetMind Overview",
-  "tags": ["fleetmind", "kafka", "jvm"],
+  "tags": [
+    "fleetmind",
+    "kafka",
+    "jvm"
+  ],
   "timezone": "browser",
   "schemaVersion": 39,
   "refresh": "5s",
-  "time": { "from": "now-15m", "to": "now" },
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
   "panels": [
     {
       "id": 1,
       "type": "timeseries",
       "title": "Kafka consumer lag (records behind, by consumer group / topic)",
       "description": "kafka_consumer_fetch_manager_records_lag from the client's own fetch manager — no broker-side exporter needed. Flat near 0 = consumers keep up; a climbing line = falling behind (or a stopped consumer).",
-      "datasource": { "type": "prometheus", "uid": "fleetmind-prometheus" },
-      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 0 },
-      "fieldConfig": { "defaults": { "unit": "short", "min": 0 }, "overrides": [] },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "fleetmind-prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
@@ -28,9 +49,23 @@
       "type": "timeseries",
       "title": "Message throughput (records/sec)",
       "description": "Producer sends vs consumer reads, per service. In steady state the pairs track each other; a gap that persists shows up as lag on the left panel.",
-      "datasource": { "type": "prometheus", "uid": "fleetmind-prometheus" },
-      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 0 },
-      "fieldConfig": { "defaults": { "unit": "reqps", "min": 0 }, "overrides": [] },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "fleetmind-prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
@@ -49,9 +84,23 @@
       "type": "timeseries",
       "title": "HTTP server latency p95 / p99",
       "description": "histogram_quantile over http_server_requests_seconds_bucket — requires management.metrics.distribution.percentiles-histogram.http.server.requests=true in each service (that's what publishes the _bucket series).",
-      "datasource": { "type": "prometheus", "uid": "fleetmind-prometheus" },
-      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 9 },
-      "fieldConfig": { "defaults": { "unit": "s", "min": 0 }, "overrides": [] },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "fleetmind-prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 9
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
@@ -70,9 +119,23 @@
       "type": "timeseries",
       "title": "JVM heap (used vs max)",
       "description": "Sawtooth = normal GC breathing. Used creeping toward max with shrinking teeth = memory pressure.",
-      "datasource": { "type": "prometheus", "uid": "fleetmind-prometheus" },
-      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 9 },
-      "fieldConfig": { "defaults": { "unit": "bytes", "min": 0 }, "overrides": [] },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "fleetmind-prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 9
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
@@ -91,9 +154,24 @@
       "type": "timeseries",
       "title": "P15 · Redis cache hit rate (per cache)",
       "description": "hits / (hits + misses) over 1m, from cache_gets_total (RedisCacheManager enableStatistics + Micrometer). Climbs toward 1.0 under dashboard load; every hit is a Postgres query that never ran. Flat 0 with traffic = cache broken; no data = nobody is reading that cache.",
-      "datasource": { "type": "prometheus", "uid": "fleetmind-prometheus" },
-      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 18 },
-      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "fleetmind-prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 18
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
@@ -107,14 +185,102 @@
       "type": "timeseries",
       "title": "P15 · Outbox leader (1 = holds the lease)",
       "description": "outbox_leader gauge, one series per instance_id (host-pid-uuid). Healthy: exactly one series at 1. Kill the leader and watch the crown hop to the other instance within one lease TTL (≤10s). BOTH at 1 = Redis is down and the lease is failing open (efficiency lock: everyone drains, SKIP LOCKED keeps it correct).",
-      "datasource": { "type": "prometheus", "uid": "fleetmind-prometheus" },
-      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 18 },
-      "fieldConfig": { "defaults": { "unit": "short", "min": 0, "max": 1, "custom": { "stepAfter": true } }, "overrides": [] },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "fleetmind-prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 18
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 1,
+          "custom": {
+            "stepAfter": true
+          }
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
           "expr": "outbox_leader",
           "legendFormat": "{{instance_id}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "P20 · GPS pings received vs rows written (per sec)",
+      "description": "Batch listener collapses each poll to the latest ping per driver. The gap between the two lines is write amplification removed.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "fleetmind-prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 27
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application) (rate(gps_pings_received_total[1m]))",
+          "legendFormat": "{{application}} pings received"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (application) (rate(gps_rows_written_total[1m]))",
+          "legendFormat": "{{application}} rows written"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "P20 · GPS batch size (avg records per poll)",
+      "description": "Under the idle sim this sits near 1. During a flood it should climb toward max-poll-records (500).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "fleetmind-prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 27
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application) (rate(gps_batch_size_sum[1m])) / sum by (application) (rate(gps_batch_size_count[1m]))",
+          "legendFormat": "{{application}} avg batch"
+        },
+        {
+          "refId": "B",
+          "expr": "max by (application) (gps_batch_size_max)",
+          "legendFormat": "{{application}} max batch"
         }
       ]
     }

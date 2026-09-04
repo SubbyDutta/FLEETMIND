@@ -66,6 +66,11 @@ The whole chain is real, and it shows up in Jaeger as one distributed trace.
 | **~14 ms vs ~2 s** | circuit-breaker fallback vs. the timeout it replaces |
 | **4/4** | planted safety violations caught by the eval harness's zero-cost dry run |
 | **rows=1 → rows=0** | the same cross-tenant curl, before and after tenancy landed (the leak existed for exactly one commit) |
+| **104,736 → 2,012** | Postgres transactions to absorb a 100,000-ping GPS flood, per-record listener vs batched collapse-to-latest (52× fewer) |
+| **29K → 0** | peak `gps.pings` consumer lag under that same flood, before vs after batching |
+| **275 → 171 ms** | read-path p95 at 100 virtual users, one command-service replica vs two |
+| **49.9%** | requests that failed on the first two-replica run — the load test found a per-replica signing-key bug |
+| **500 / 500** | synthetic drivers at their final GPS sequence after killing a replica mid-flood |
 
 Everything in that table was measured, not estimated. The one number this README refuses to invent is the full 30-scenario eval score — it's still being run in batches on free-tier quota, and it lands here when it's real.
 
@@ -190,6 +195,42 @@ Circuit breakers guard both external edges. The interesting one wraps the AI-ser
 ### Notifications, or: at-least-once means you'll send it twice
 
 The notification service consumes alerts, order terminals, and dispatch actions and turns them into Thymeleaf HTML emails plus in-app rows — deduped by `topic-partition-offset` in its own table, so a redelivery never emails a customer twice. It boots with `auto-offset-reset: latest` deliberately: `earliest` on first deploy would replay the entire event history and blast every email at once. A mail failure propagates, so the retry ladder and DLT get their shot.
+
+### Every GPS ping was a transaction
+
+Twenty-seven riders pinging every three seconds is nine writes a second, and nobody notices. So I built a load knob into the simulator: `POST /sim/flood` publishes 500 synthetic drivers × 200 pings, keyed by driver exactly like the real ones, with the sequence number stored in the speed field so "did we lose anything" is one SQL query afterwards. Then I measured what the per-record projection actually cost: **103,427 row writes and 104,736 commits for 100,000 pings.** One transaction per ping, a consumer lag that peaked at 29,000 records, and a minute and a half to drain it.
+
+The fix is a batch listener on its own container factory — flip the shared factory to batch mode and every other listener in the service fails to start. Each poll collapses to the newest ping per driver, which is only safe because the producer keys by `driverId` and a driver's pings are therefore totally ordered on one partition. The survivors go out in a single `batchUpdate`. Same flood: **35,922 writes, 2,012 commits, no visible lag.** Rows only drop 2.9× because collapse is bounded by distinct drivers per partition per poll; the 52× drop in transactions is the real win, and the flat lag line is why it matters.
+
+![Consumer lag: the 29K spike is the per-record listener, the flat line at 19:05 is the same flood through the batch listener](docs/p20/p20-06-lag-baseline-vs-batched.png)
+
+![Pings received vs rows written per second, and records per poll climbing from 1 to ~200 under load](docs/p20/p20-11-two-batched-floods-panels.png)
+
+### Then the load test found a bug
+
+k6 ramps 25 → 100 virtual users over three minutes against the REST read path, hitting the service directly. The gateway's rate limiter is a per-user quota, and a capacity test through it would measure the quota, not the service. One replica: **p95 275 ms, 301 req/s, zero failures.**
+
+Two replicas, round-robin from the client because there is no load balancer in this stack: **49.9% of requests failed, in zero milliseconds.** Half of round-robin failing instantly means one host rejects before doing any work. `JwtKeyConfig` generated a fresh RSA key on every startup, so a token minted by one instance was a forgery as far as the other was concerned. Eighteen phases on a single instance and it never showed. The key now lives in a shared JWK file — a keystore or secret manager in production, but the shape of the lesson is the same: anything generated at startup is per-replica state, and per-replica state is a scaling bug waiting for a second replica. Rerun: **p95 171 ms, 390 req/s, zero failures.**
+
+Last, the kill. Both replicas up, a slow 100,000-ping flood, and the first instance stopped halfway through. The survivor's log shows generation 15 of the consumer group with all twelve `gps.pings` partitions on it, and every one of the 500 synthetic drivers finished at sequence 200. Manual ack plus an idempotent upsert is all the rebalance safety this projection needs.
+
+<details>
+<summary>Reproduce it</summary>
+
+```powershell
+# flood (returns 202 immediately; simulator logs FLOOD DONE with the producer rate)
+curl.exe -X POST "http://localhost:8085/sim/flood?drivers=500&pings=200"
+
+# second replica
+./gradlew :command-service:bootRun --args="--server.port=8087 --grpc.server.port=9191"
+
+# read-path load, one or two hosts
+k6 run load/read-path.js
+k6 run -e HOSTS=http://localhost:8086,http://localhost:8087 load/read-path.js
+```
+
+Before/after counters and the no-loss check are in [`load/measure.sql`](load/measure.sql); the previous per-record listener is kept in [`load/baseline/`](load/baseline/) so the comparison can be re-run. Screenshots behind every number above are in [`docs/p20/`](docs/p20/).
+</details>
 
 ### If something breaks, I want to see where
 
@@ -353,6 +394,7 @@ The tests I'd point at first:
 - **The outbox invariant**: order update and outbox row commit or roll back *together*; busy / unknown / cross-tenant / delivered targets are rejected with nothing written.
 - **DLT routing**: deserialization poison skips retries and dead-letters via the byte-array template; transient failures walk the full 1s → 2s → 4s ladder first. These tests caught two stale-docs assumptions, including the framework's actual `-dlt` suffix.
 - **JWT**: forged foreign-key tokens and expired tokens rejected; missing tenant context fails closed.
+- **Collapse-to-latest**: three pings for one driver and one for another produce exactly two rows written, newest position winning; an empty batch still acks.
 - **Tool isolation**: a faked model request for a write tool from the read-only agent yields "unknown tool".
 - **Notification dedupe**: a redelivered offset is skipped; a mail failure propagates so the DLT machinery engages.
 - Java `Timestamp` survives the Redis JSON serializer round-trip — verified by running it, not assumed.
@@ -367,8 +409,6 @@ python -m evals.report                       # grade, print scorecard, exit 1 be
 ```
 
 ## What's left
-
-One phase: **load testing.** Batch the GPS-ping projection writes (Kafka batch listener + `batchUpdate`, collapse-to-latest-per-driver), then k6 against multiple command-service replicas — kill one mid-test and prove the consumer group rebalances without loss. The before/after write-amplification numbers land here when it's done.
 
 Known limitation, stated plainly: the full 30-scenario eval score is still pending free-tier quota; the harness, dry run, and first live scenarios are green.
 
@@ -391,6 +431,8 @@ ai-service/            Python: dispatch + analytics agents, per-tenant runbook R
 web/                   React + Leaflet ops console: login, live map, alerts, agent drawer
 db/                    Postgres image (PostGIS + pgvector) + schema
 observability/         Prometheus scrape config + provisioned Grafana dashboards
+load/                  k6 read-path script, measurement SQL, the per-record listener kept for before/after
+docs/p20/              the screenshots behind the load-test numbers
 .github/               CI: Gradle build + tests against the project's own db image
 ```
 </details>

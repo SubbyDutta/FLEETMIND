@@ -7,6 +7,7 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -34,6 +35,30 @@ public class DriverRepository {
                 ping.getSpeedKmph()
         );
     }
+
+    public void upsertPositions(Collection<GpsPing> pings) {
+        if (pings.isEmpty()) return;
+        jdbc.batchUpdate(
+                """
+                INSERT INTO drivers (id, name, status, location, speed_kmph, updated_at)
+                VALUES (?, ?, ?, ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography, ?, now())
+                ON CONFLICT (id) DO UPDATE SET
+                    status     = EXCLUDED.status,
+                    location   = EXCLUDED.location,
+                    speed_kmph = EXCLUDED.speed_kmph,
+                    updated_at = now()
+                """,
+                pings, pings.size(),
+                (ps, p) -> {
+                    ps.setString(1, p.getDriverId());
+                    ps.setString(2, p.getDriverId());
+                    ps.setString(3, p.getStatus().name());
+                    ps.setDouble(4, p.getLng());
+                    ps.setDouble(5, p.getLat());
+                    ps.setDouble(6, p.getSpeedKmph());
+                });
+    }
+
     @Cacheable(cacheNames = "drivers", key = "T(com.TenantContext).require() + ':all'")
     public List<Map<String,Object>> findAll()
     {

@@ -33,6 +33,8 @@ spring:
         schema.registry.url: http://localhost:8081
         specific.avro.reader: true
         partition.assignment.strategy: org.apache.kafka.clients.consumer.CooperativeStickyAssignor
+        fetch.min.bytes: 65536
+        fetch.max.wait.ms: 300
     listener:
       ack-mode: MANUAL
       concurrency: 12
@@ -97,6 +99,7 @@ resilience4j:
 fleetmind:
   auth:
     token-ttl-minutes: 60
+    jwk-file: ${user.home}/.fleetmind/jwk.json
     seed-demo-users: true
     demo-password: demo123
 
